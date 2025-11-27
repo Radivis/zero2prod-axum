@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpRequest, HttpServer, Responder};
+use actix_web::{App, HttpRequest, HttpServer, Responder, web};
 async fn greet(req: HttpRequest) -> impl Responder {
     let name = req.match_info().get("name").unwrap_or("World");
     format!("Hello {}!", &name)
