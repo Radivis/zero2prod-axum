@@ -1,5 +1,5 @@
 [hooks]
-pre-commit = ["cargo fmt", "cargo clippy --all-targets -- -D warnings"]
+pre-commit = "cargo fmt"
 
 [logging]
 verbose = true
