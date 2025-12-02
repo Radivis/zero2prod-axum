@@ -7,6 +7,7 @@
 use sqlx::PgPool;
 use sqlx::{Connection, Executor, PgConnection};
 use std::net::TcpListener;
+use std::time::Duration;
 use uuid::Uuid;
 use zero2prod::configuration::{DatabaseSettings, get_configuration};
 use zero2prod::startup::run;
@@ -33,17 +34,18 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let test_app = spawn_app().await;
-    let configuration = get_configuration().expect("Failed to read configuration");
-    let connection_string = configuration.database.connection_string();
+    // let configuration = get_configuration().expect("Failed to read configuration");
+    // let connection_string = configuration.database.connection_string();
     // The `Connection` trait MUST be in scope for us to invoke
     // `PgConnection::connect` - it is not an inherent method of the struct!
-    let mut connection = PgConnection::connect(&connection_string)
+    /*let mut connection = PgConnection::connect(&connection_string)
         .await
         .expect("Failed to connect to Postgres.");
+    */
     let client = reqwest::Client::new();
     // Act
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -58,16 +60,21 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     // Assert
     assert_eq!(200, response.status().as_u16());
 
-    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
-        .fetch_one(&mut connection)
-        .await
-        .expect("Failed to fetch saved subscription.");
+    let saved = retry(
+        || async {
+            sqlx::query!("SELECT email, name FROM subscriptions",)
+                .fetch_one(&test_app.connection_pool)
+                .await
+        },
+        5,
+    )
+    .await;
 
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
     assert_eq!(saved.name, "le guin");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[tokio::test]
 async fn subscribe_returns_a_400_when_data_is_missing() {
     // Arrange
     let test_app = spawn_app().await;
@@ -142,4 +149,21 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to migrate the database");
     connection_pool
+}
+
+async fn retry<F, Fut, T>(mut f: F, max_retries: u8) -> T
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, sqlx::Error>>,
+{
+    for attempt in 0..max_retries {
+        match f().await {
+            Ok(value) => return value,
+            Err(sqlx::Error::RowNotFound) if attempt < max_retries - 1 => {
+                tokio::time::sleep(Duration::from_millis(100)).await; // 100ms backoff
+            }
+            Err(e) => return Err(e).expect("Non-RowNotFound error"),
+        }
+    }
+    f().await.expect("Retry exhausted")
 }
