@@ -1,5 +1,5 @@
-use std::net::TcpListener;
 use sqlx::PgPool;
+use std::net::TcpListener;
 use zero2prod::configuration::get_configuration;
 use zero2prod::startup::run;
 
@@ -14,5 +14,7 @@ async fn main() -> Result<(), std::io::Error> {
     let listener = TcpListener::bind(address)?;
     let post_binding_error_message =
         format!("Failed to bind to port {}", configuration.application_port);
-    run(listener, connection_pool).expect(&post_binding_error_message).await
+    run(listener, connection_pool)
+        .expect(&post_binding_error_message)
+        .await
 }
