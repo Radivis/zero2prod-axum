@@ -114,6 +114,8 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
+      - name: Check compile-time queries
+        run: cargo sqlx prepare --check --workspace
       - name: Linting
         run: cargo clippy -- -D warnings
 
