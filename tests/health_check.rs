@@ -162,7 +162,7 @@ where
             Err(sqlx::Error::RowNotFound) if attempt < max_retries - 1 => {
                 tokio::time::sleep(Duration::from_millis(100)).await; // 100ms backoff
             }
-            Err(e) => return Err(e).expect("Non-RowNotFound error"),
+            Err(e) => panic!("{1}: {:?}", e, "Non-RowNotFound error"),
         }
     }
     f().await.expect("Retry exhausted")
