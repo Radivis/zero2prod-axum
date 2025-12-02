@@ -1,6 +1,6 @@
 use std::net::TcpListener;
-use zero2prod::startup::run;
 use zero2prod::configuration::get_configuration;
+use zero2prod::startup::run;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -9,8 +9,7 @@ async fn main() -> Result<(), std::io::Error> {
     // We have removed the hard-coded `8000` - it's now coming from our settings!
     let address = format!("127.0.0.1:{}", configuration.application_port);
     let listener = TcpListener::bind(address)?;
-    let post_binding_error_message = format!("Failed to bind to port {}", configuration.application_port);
-    run(listener)
-        .expect(&post_binding_error_message)
-        .await
+    let post_binding_error_message =
+        format!("Failed to bind to port {}", configuration.application_port);
+    run(listener).expect(&post_binding_error_message).await
 }
