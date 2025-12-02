@@ -1,0 +1,8 @@
+services:
+  postgres:
+    image: postgres:16.11-bookworm
+    environment:
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    # …
