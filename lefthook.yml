@@ -25,7 +25,7 @@ pre-commit:
   parallel: true
   commands:
     fmt:
-      run: cargo fmt -- --check
+      run: cargo fmt
     sqlx:
       run: cargo sqlx prepare --check --workspace -- --all-targets
     clippy:
