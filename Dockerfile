@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1.4
+# ^^ THIS LINE ENABLES BuildKit features like --from=
+
 FROM lukemathwalker/cargo-chef:latest-rust-1.91.1 as chef
 WORKDIR /app
 RUN apt update && apt install lld clang -y
