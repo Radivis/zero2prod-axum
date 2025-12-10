@@ -19,7 +19,7 @@ static LOG_GUARD: Lazy<Mutex<Option<WorkerGuard>>> = Lazy::new(|| Mutex::new(Non
 static TRACING: LazyLock<()> = LazyLock::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
-    let loglevel = std::env::var("LOGLEVEL").unwrap_or_else(|_| default_filter_level);
+    let loglevel = std::env::var("LOGLEVEL").unwrap_or(default_filter_level);
     // We cannot assign the output of `get_subscriber` to a variable based on the
     // value TEST_LOG` because the sink is part of the type returned by
     // `get_subscriber`, therefore they are not the same type. We could work around
@@ -34,9 +34,26 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 });
 
 pub fn test_writer() -> NonBlocking {
+    // nextest passes the test name via --exact argument
+    // uncomment the next line and run "cargo test --no-capture" to see how the args are structured:
+    // std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
+    let test_name = std::env::args()
+        .skip_while(|arg| arg != "--exact")
+        .nth(1) // we need the first arg exactly after "--exact"
+        .and_then(|arg| arg.split("::").last().map(str::to_owned))
+        .unwrap_or("unlabeled_test".into())
+        .replace(' ', "_");
+
     let _ = std::fs::create_dir_all("tests/logs");
-    let file_appender = tracing_appender::rolling::never("tests/logs", "integration.log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let _ = std::fs::create_dir_all("tests/logs/nextest");
+    let _ = std::fs::create_dir_all("tests/logs/cargo_test");
+    let filename = if test_name != "unlabeled_test" {
+        format!("tests/logs/nextest/{}.log", test_name)
+    } else {
+        "tests/logs/cargo_test/integration.log".into()
+    };
+    let file = std::fs::File::create(filename).expect("Failed to create log file");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
     // Store guard so it lives until process end
     let mut slot = LOG_GUARD.lock().unwrap();
