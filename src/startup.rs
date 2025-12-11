@@ -18,6 +18,13 @@ pub struct Application {
     server: Server,
 }
 
+struct AppServerParams {
+    listener: TcpListener,
+    connection_pool: PgPool,
+    email_client: EmailClient,
+    base_url: String,
+}
+
 // We need to define a wrapper type in order to retrieve the URL
 // in the `subscribe` handler.
 // Retrieval from the context, in actix-web, is type-based: using
@@ -44,12 +51,12 @@ impl Application {
         );
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr()?.port();
-        let server = run(
+        let server = run(AppServerParams {
             listener,
             connection_pool,
             email_client,
-            configuration.application.base_url,
-        )?;
+            base_url: configuration.application.base_url,
+        })?;
 
         Ok(Self { port, server })
     }
@@ -66,17 +73,15 @@ impl Application {
 // We need to mark `run` as public.
 // It is no longer a binary entrypoint, therefore we can mark it as async
 // without having to use any proc-macro incantation.
-pub fn run(
-    listener: TcpListener,
-    connection_pool: PgPool,
-    email_client: EmailClient,
-    base_url: String,
-) -> Result<Server, std::io::Error> {
-    tracing::debug!("running app with email_client: {:?}", &email_client);
+fn run(app_server_params: AppServerParams) -> Result<Server, std::io::Error> {
+    tracing::debug!(
+        "running app with email_client: {:?}",
+        &app_server_params.email_client
+    );
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
-    let connection_pool = web::Data::new(connection_pool);
-    let email_client = web::Data::new(email_client);
-    let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+    let connection_pool = web::Data::new(app_server_params.connection_pool);
+    let email_client = web::Data::new(app_server_params.email_client);
+    let base_url = web::Data::new(ApplicationBaseUrl(app_server_params.base_url));
     // Capture `connection` from the surrounding environment
     let server = HttpServer::new(move || {
         App::new()
@@ -91,7 +96,7 @@ pub fn run(
             .app_data(email_client.clone())
             .app_data(base_url.clone())
     })
-    .listen(listener)?
+    .listen(app_server_params.listener)?
     .run();
     Ok(server)
 }
