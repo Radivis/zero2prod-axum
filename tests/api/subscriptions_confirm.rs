@@ -38,7 +38,7 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
         assert_eq!(links.len(), 1);
         links[0].as_str().to_owned()
     };
-    let raw_confirmation_link = &get_link(&body["HtmlBody"].as_str().unwrap());
+    let raw_confirmation_link = &get_link(body["HtmlBody"].as_str().unwrap());
     let mut confirmation_link = Url::parse(raw_confirmation_link).unwrap();
     // Let's rewrite the URL to include the port
     confirmation_link.set_port(Some(app.port)).unwrap();
