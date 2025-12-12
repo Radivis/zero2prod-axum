@@ -1,6 +1,7 @@
 use crate::domain::{NewSubscriber, SubscriberEmailAddress, SubscriberName};
 use crate::email_client::{EmailClient, EmailData};
 use crate::startup::ApplicationBaseUrl;
+use crate::telemetry::error_chain_fmt;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError, web};
 use anyhow::Context;
@@ -23,19 +24,6 @@ impl TryFrom<FormData> for NewSubscriber {
         let email = SubscriberEmailAddress::parse(value.email)?;
         Ok(Self { email, name })
     }
-}
-
-fn error_chain_fmt(
-    e: &impl std::error::Error,
-    f: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
-    writeln!(f, "{}\n", e)?;
-    let mut current = e.source();
-    while let Some(cause) = current {
-        writeln!(f, "Caused by:\n\t{}", cause)?;
-        current = cause.source();
-    }
-    Ok(())
 }
 
 pub struct StoreTokenError(pub sqlx::Error);

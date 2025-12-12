@@ -1,4 +1,4 @@
-use crate::helpers::{TestApp, mount_mock_email_server, spawn_app};
+use crate::helpers::{ConfirmationLinks, TestApp, mount_mock_email_server, spawn_app};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate, Times};
 
@@ -22,21 +22,72 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         }
     });
     // Use the fact that there are no confirmed subscribers at all at this stage!
-    let response = reqwest::Client::new()
-        .post(format!("{}/newsletters", &app.address))
-        .json(&newsletter_request_body)
-        .send()
-        .await
-        .expect("Failed to execute request.");
+    let response = app.post_newsletters(newsletter_request_body).await;
 
     // Assert
     assert_eq!(response.status().as_u16(), 200);
     // Mock verifies on Drop that we haven't sent the newsletter email
 }
 
+#[tokio::test]
+async fn newsletters_are_delivered_to_confirmed_subscribers() {
+    // Arrange
+    let app = spawn_app().await;
+    create_confirmed_subscriber(&app).await;
+    let times: Times = 1.into();
+    let _ = mount_mock_email_server(&app.email_server, Some(times)).await;
+
+    // Act
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "Newsletter body as plain text",
+            "html": "<p>Newsletter body as HTML</p>" ,
+        }
+    });
+    let response = app.post_newsletters(newsletter_request_body).await;
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 200);
+    // Mock verifies on Drop that we have sent the newsletter email
+}
+
+#[tokio::test]
+async fn newsletters_returns_400_for_invalid_data() {
+    // Arrange
+    let app = spawn_app().await;
+    let test_cases = vec![
+        (
+            serde_json::json!({
+                "content": {
+                    "text": "Newsletter body as plain text" ,
+                    "html": "<p>Newsletter body as HTML</p>",
+                }
+            }),
+            "missing title",
+        ),
+        (
+            serde_json::json!({"title": "Newsletter!"}),
+            "missing content",
+        ),
+    ];
+
+    for (invalid_body, error_message) in test_cases {
+        let response = app.post_newsletters(invalid_body).await;
+
+        // Assert
+        assert_eq!(
+            400,
+            response.status().as_u16(),
+            "The API did not fail with 400 Bad Request when the payload was {}.",
+            error_message
+        );
+    }
+}
+
 /// Use the public API of the application under test to create
 /// an unconfirmed subscriber.
-async fn create_unconfirmed_subscriber(app: &TestApp) {
+async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 
     // One confirmation mail should be sent
@@ -49,6 +100,28 @@ async fn create_unconfirmed_subscriber(app: &TestApp) {
         .await;
     app.post_subscriptions(body.into())
         .await
+        .error_for_status()
+        .unwrap();
+
+    // We now inspect the requests received by the mock Postmark server
+    // to retrieve the confirmation link and return it
+    let confirmation_email_request = &app
+        .email_server
+        .received_requests()
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    app.get_confirmation_links(confirmation_email_request)
+}
+
+async fn create_confirmed_subscriber(app: &TestApp) {
+    // We can then reuse the same helper and just add
+    // an extra step to actually call the confirmation link!
+    let confirmation_link = create_unconfirmed_subscriber(app).await;
+    reqwest::get(confirmation_link.html)
+        .await
+        .unwrap()
         .error_for_status()
         .unwrap();
 }
