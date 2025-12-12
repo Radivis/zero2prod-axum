@@ -5,8 +5,8 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 use uuid::Uuid;
-use wiremock::MockServer;
-
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate, Times};
 use zero2prod::configuration::{DatabaseSettings, get_configuration};
 use zero2prod::startup::Application;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
@@ -179,6 +179,20 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to migrate the database");
     connection_pool
+}
+
+pub async fn mount_mock_email_server(
+    email_server: &MockServer,
+    num_expected_requests: Option<Times>,
+) -> () {
+    let mock = Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200));
+    if let Some(expected) = num_expected_requests {
+        mock.expect(expected).mount(email_server).await
+    } else {
+        mock.mount(email_server).await
+    }
 }
 
 pub async fn retry<F, Fut, T>(mut f: F, max_retries: u8) -> T

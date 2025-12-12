@@ -1,6 +1,5 @@
-use crate::helpers::{retry, spawn_app};
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, ResponseTemplate};
+use crate::helpers::{mount_mock_email_server, retry, spawn_app};
+use wiremock::Times;
 
 #[tokio::test]
 #[tracing::instrument(name = "subscribe_returns_a_200_for_valid_form_data")]
@@ -12,11 +11,8 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         &test_app.email_server
     );
 
-    Mock::given(path("/email"))
-        .and(method("POST"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&test_app.email_server)
-        .await;
+    mount_mock_email_server(&test_app.email_server, None).await;
+
     // Act
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     let response = test_app.post_subscriptions(body.into()).await;
@@ -35,11 +31,8 @@ async fn subscribe_persists_the_new_subscriber() {
         &test_app.email_server
     );
 
-    Mock::given(path("/email"))
-        .and(method("POST"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&test_app.email_server)
-        .await;
+    let times: Times = (0..).into();
+    let _ = mount_mock_email_server(&test_app.email_server, Some(times)).await;
 
     // Act
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -129,12 +122,8 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
         &test_app.email_server
     );
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    Mock::given(path("/email"))
-        .and(method("POST"))
-        .respond_with(ResponseTemplate::new(200))
-        .expect(1)
-        .mount(&test_app.email_server)
-        .await;
+    let times: Times = (1..).into();
+    let _ = mount_mock_email_server(&test_app.email_server, Some(times)).await;
     // Act
     test_app.post_subscriptions(body.into()).await;
     // Assert
@@ -151,14 +140,7 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
         &test_app.email_server
     );
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    Mock::given(path("/email"))
-        .and(method("POST"))
-        .respond_with(ResponseTemplate::new(200))
-        // We are not setting an expectation here anymore
-        // The test is focused on another aspect of the app
-        // behaviour.
-        .mount(&test_app.email_server)
-        .await;
+    let _ = mount_mock_email_server(&test_app.email_server, None).await;
 
     // Act
     test_app.post_subscriptions(body.into()).await;
