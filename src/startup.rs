@@ -7,7 +7,7 @@ use std::net::TcpListener;
 use tracing_actix_web::TracingLogger;
 
 use crate::email_client::EmailClient;
-use crate::routes::{confirm, health_check, subscribe};
+use crate::routes::{confirm, health_check, publish_newsletter, subscribe};
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
     PgPoolOptions::new().connect_lazy_with(db_configuration.connect_options())
@@ -88,7 +88,7 @@ fn run(app_server_params: AppServerParams) -> Result<Server, std::io::Error> {
             // Middlewares are added using the `wrap` method on `App`
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
-            // A new entry in our routing table for POST /subscriptions requests
+            .route("/newsletters", web::post().to(publish_newsletter))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             // Get a pointer copy of the connection pool and attach it to the application state
