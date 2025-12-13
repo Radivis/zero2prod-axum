@@ -1,4 +1,4 @@
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version, password_hash::SaltString};
 use once_cell::sync::Lazy;
 use secrecy::Secret;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
@@ -76,7 +76,7 @@ pub struct TestApp {
     pub port: u16,
     pub db_connection_pool: PgPool,
     pub email_server: MockServer,
-    test_user: TestUser,
+    pub test_user: TestUser,
 }
 
 impl TestApp {
@@ -149,12 +149,15 @@ impl TestUser {
     }
     async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
-        // We don't care about the exact Argon2 parameters here
-        // given that it's for testing purposes!
-        let password_hash = Argon2::default()
-            .hash_password(self.password.as_bytes(), &salt)
-            .unwrap()
-            .to_string();
+        // Match parameters of the default password
+        let password_hash = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(15000, 2, 1, None).unwrap(),
+        )
+        .hash_password(self.password.as_bytes(), &salt)
+        .unwrap()
+        .to_string();
         sqlx::query!(
             "INSERT INTO users (user_id, username, password_hash)
             VALUES ($1, $2, $3)",
