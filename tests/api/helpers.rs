@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use secrecy::Secret;
+use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -74,12 +75,14 @@ pub struct TestApp {
     pub port: u16,
     pub db_connection_pool: PgPool,
     pub email_server: MockServer,
+    test_user: TestUser,
 }
 
 impl TestApp {
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(format!("{}/newsletters", &self.address))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(&body)
             .send()
             .await
@@ -117,6 +120,45 @@ impl TestApp {
         let html = get_link(body["HtmlBody"].as_str().unwrap());
         let plain_text = get_link(body["TextBody"].as_str().unwrap());
         ConfirmationLinks { html, plain_text }
+    }
+
+    pub async fn _get_test_user(&self) -> (String, String) {
+        let row = sqlx::query!("SELECT username, password_hash FROM users LIMIT 1",)
+            .fetch_one(&self.db_connection_pool)
+            .await
+            .expect("Failed to create test users.");
+        (row.username, row.password_hash)
+    }
+}
+
+#[derive(Debug)]
+pub struct TestUser {
+    pub user_id: Uuid,
+    pub username: String,
+    pub password: String,
+}
+
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        }
+    }
+    async fn store(&self, pool: &PgPool) {
+        let password_hash = sha3::Sha3_256::digest(self.password.as_bytes());
+        let password_hash = format!("{:x}", password_hash);
+        sqlx::query!(
+            "INSERT INTO users (user_id, username, password_hash)
+            VALUES ($1, $2, $3)",
+            self.user_id,
+            self.username,
+            password_hash,
+        )
+        .execute(pool)
+        .await
+        .expect("Failed to store test user.");
     }
 }
 
@@ -157,7 +199,10 @@ pub async fn spawn_app() -> TestApp {
         port,
         db_connection_pool,
         email_server,
+        test_user: TestUser::generate(),
     };
+
+    test_app.test_user.store(&test_app.db_connection_pool).await;
 
     tracing::debug!("test_app spawned with details: {:?}", &test_app);
 
