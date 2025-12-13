@@ -21,11 +21,11 @@ struct SendEmailRequest<'a> {
 }
 
 #[derive(Debug)]
-pub struct EmailData {
-    pub recipient: SubscriberEmailAddress,
-    pub subject: String,
-    pub html_content: String,
-    pub text_content: String,
+pub struct EmailData<'a> {
+    pub recipient: &'a SubscriberEmailAddress,
+    pub subject: &'a String,
+    pub html_content: &'a String,
+    pub text_content: &'a String,
 }
 
 impl EmailClient {
@@ -45,7 +45,7 @@ impl EmailClient {
     }
 
     #[tracing::instrument(name = "Sending email")]
-    pub async fn send_email(&self, data: EmailData) -> Result<(), reqwest::Error> {
+    pub async fn send_email<'a>(&self, data: EmailData<'a>) -> Result<(), reqwest::Error> {
         // No matter the input
         let url = format!("{}/email", self.base_url);
         let request_body = SendEmailRequest {
@@ -129,12 +129,12 @@ mod tests {
     }
 
     async fn send_random_email(email_client: &EmailClient) -> Result<(), reqwest::Error> {
-        let content = generate_random_email_content();
+        let content = &generate_random_email_content();
         email_client
             .send_email(EmailData {
-                recipient: generate_random_subscriber_email_address(),
-                subject: generate_random_email_subject(),
-                html_content: content.clone(),
+                recipient: &generate_random_subscriber_email_address(),
+                subject: &generate_random_email_subject(),
+                html_content: content,
                 text_content: content,
             })
             .await
