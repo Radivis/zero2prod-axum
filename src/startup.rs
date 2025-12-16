@@ -1,3 +1,5 @@
+use actix_session::SessionMiddleware;
+use actix_session::storage::RedisSessionStore;
 use actix_web::cookie::Key;
 use actix_web::dev::Server;
 use actix_web::{App, HttpServer, web};
@@ -30,6 +32,7 @@ struct AppServerParams {
     email_client: EmailClient,
     base_url: String,
     hmac_secret: Secret<String>,
+    redis_uri: Secret<String>,
 }
 
 #[derive(Clone)]
@@ -42,7 +45,7 @@ pub struct HmacSecret(pub Secret<String>);
 pub struct ApplicationBaseUrl(pub String);
 
 impl Application {
-    pub async fn build(configuration: Settings) -> Result<Self, std::io::Error> {
+    pub async fn build(configuration: Settings) -> Result<Self, anyhow::Error> {
         let connection_pool = get_connection_pool(&configuration.database);
         let sender_email = configuration
             .email_client
@@ -67,7 +70,9 @@ impl Application {
             email_client,
             base_url: configuration.application.base_url,
             hmac_secret: configuration.application.hmac_secret,
-        })?;
+            redis_uri: configuration.redis_uri,
+        })
+        .await?;
 
         Ok(Self { port, server })
     }
@@ -84,7 +89,7 @@ impl Application {
 // We need to mark `run` as public.
 // It is no longer a binary entrypoint, therefore we can mark it as async
 // without having to use any proc-macro incantation.
-fn run(app_server_params: AppServerParams) -> Result<Server, std::io::Error> {
+async fn run(app_server_params: AppServerParams) -> Result<Server, anyhow::Error> {
     tracing::debug!(
         "running app with email_client: {:?}",
         &app_server_params.email_client
@@ -97,13 +102,19 @@ fn run(app_server_params: AppServerParams) -> Result<Server, std::io::Error> {
         app_server_params.hmac_secret.expose_secret().as_bytes(),
     ))
     .build();
+    let secret_key = Key::from(app_server_params.hmac_secret.expose_secret().as_bytes());
     let message_framework = FlashMessagesFramework::builder(message_store).build();
     let hmac_secret = web::Data::new(HmacSecret(app_server_params.hmac_secret));
+    let redis_store = RedisSessionStore::new(app_server_params.redis_uri.expose_secret()).await?;
     // Capture `connection` from the surrounding environment
     let server = HttpServer::new(move || {
         App::new()
             // Middlewares are added using the `wrap` method on `App`
             .wrap(message_framework.clone())
+            .wrap(SessionMiddleware::new(
+                redis_store.clone(),
+                secret_key.clone(),
+            ))
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/", web::get().to(home))
