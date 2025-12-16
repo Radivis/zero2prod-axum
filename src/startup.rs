@@ -14,8 +14,8 @@ use tracing_actix_web::TracingLogger;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::{
-    admin_dashboard, change_password, change_password_form, confirm, health_check, home, login,
-    login_form, publish_newsletter, subscribe,
+    admin_dashboard, change_password, change_password_form, confirm, health_check, home, log_out,
+    login, login_form, publish_newsletter, subscribe,
 };
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
@@ -118,6 +118,7 @@ async fn run(app_server_params: AppServerParams) -> Result<Server, anyhow::Error
             ))
             .wrap(TracingLogger::default())
             .route("/admin/dashboard", web::get().to(admin_dashboard))
+            .route("/admin/logout", web::post().to(log_out))
             .route("/admin/password", web::get().to(change_password_form))
             .route("/admin/password", web::post().to(change_password))
             .route("/health_check", web::get().to(health_check))
