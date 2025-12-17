@@ -11,15 +11,10 @@ use crate::email_client::{EmailClient, EmailData};
 use crate::telemetry::error_chain_fmt;
 
 #[derive(Debug, serde::Deserialize)]
-pub struct BodyData {
+pub struct SendNewsletterFormData {
     title: String,
-    content: Content,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct Content {
-    html: String,
-    text: String,
+    html_content: String,
+    text_content: String,
 }
 
 struct ConfirmedSubscriber {
@@ -62,11 +57,11 @@ impl ResponseError for PublishError {
 
 #[tracing::instrument(
     name = "Publish Newsletter",
-    skip(body, db_connection_pool, user_id)
+    skip(form, db_connection_pool, user_id)
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 pub async fn publish_newsletter(
-    body: web::Json<BodyData>,
+    form: web::Form<SendNewsletterFormData>,
     db_connection_pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
@@ -78,9 +73,9 @@ pub async fn publish_newsletter(
         "Publishing new newsletter to {} confirmed subscribers",
         subscribers.len()
     );
-    let subject = &body.title;
-    let html_content = &body.content.html;
-    let text_content = &body.content.text;
+    let subject = &form.title;
+    let html_content = &form.html_content;
+    let text_content = &form.text_content;
     for subscriber in subscribers {
         match subscriber {
             Ok(subscriber) => {

@@ -160,10 +160,13 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletters<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
         self.api_client
             .post(format!("{}/admin/newsletters", &self.address))
-            .json(&body)
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -263,7 +266,7 @@ pub async fn spawn_app() -> TestApp {
     let configuration = {
         let mut c = get_configuration().expect("Failed to read configuration.");
         // Use a different database for each test case
-        c.database.database_name = Uuid::new_v4().to_string();
+        c.database.database_name = format!("test_{}", Uuid::new_v4());
         // Use a random OS port
         c.application.port = 0;
         c.email_client.base_url = email_server.uri();

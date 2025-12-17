@@ -22,7 +22,7 @@ pub async fn publish_newsletter_form(
     </head>
     <body>
         {msg_html}
-        <form action="/admin/password" method="post">
+        <form action="/admin/newsletters" method="post">
             <label>Title
                 <input
                     type="text"
@@ -31,12 +31,22 @@ pub async fn publish_newsletter_form(
                 >
             </label>
             <br>
-            <label>Content
-                <textfield
-                    type="password"
-                    placeholder="Enter the content of the newsletter"
-                    name="content"
-                />
+            <label>HTML Content
+                <textarea
+                    placeholder="Enter the content of the regular (HTML) newsletter"
+                    name="html_content"
+                    rows="20"
+                    cols=100"
+                ></textarea>
+            </label>
+            <br>
+            <label>Plain text Content
+                <textarea
+                    placeholder="Enter the content of the plain text newsletter"
+                    name="text_content"
+                    rows="20"
+                    cols=100"
+                ></textarea>
             </label>
             <br>
             <button type="submit">Send newsletter</button>
