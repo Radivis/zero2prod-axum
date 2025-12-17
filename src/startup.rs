@@ -10,6 +10,7 @@ use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
+use std::time::Duration;
 use tracing_actix_web::TracingLogger;
 
 use crate::authentication::reject_anonymous_users;
@@ -18,7 +19,7 @@ use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::{
     admin_dashboard, change_password, change_password_form, confirm, health_check, home, log_out,
-    login, login_form, publish_newsletter, subscribe,
+    login, login_form, publish_newsletter, publish_newsletter_form, subscribe,
 };
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
@@ -101,7 +102,6 @@ async fn run(app_server_params: AppServerParams) -> Result<Server, anyhow::Error
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
     let connection_pool = web::Data::new(app_server_params.connection_pool);
     let email_client = web::Data::new(app_server_params.email_client);
-    let base_url = web::Data::new(ApplicationBaseUrl(app_server_params.base_url));
     let message_store = CookieMessageStore::builder(Key::from(
         app_server_params.hmac_secret.expose_secret().as_bytes(),
     ))
@@ -109,8 +109,15 @@ async fn run(app_server_params: AppServerParams) -> Result<Server, anyhow::Error
     let secret_key = Key::from(app_server_params.hmac_secret.expose_secret().as_bytes());
     let message_framework = FlashMessagesFramework::builder(message_store).build();
     let hmac_secret = web::Data::new(HmacSecret(app_server_params.hmac_secret));
-    let redis_store = RedisSessionStore::new(app_server_params.redis_uri.expose_secret()).await?;
+    let redis_store = tokio::time::timeout(
+        Duration::from_secs(5),
+        RedisSessionStore::new(app_server_params.redis_uri.expose_secret()),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Failed to connect to Redis within 5 seconds"))??;
     // Capture `connection` from the surrounding environment
+    tracing::info!("Starting HTTP server at {}", &app_server_params.base_url);
+    let base_url = web::Data::new(ApplicationBaseUrl(app_server_params.base_url));
     let server = HttpServer::new(move || {
         App::new()
             // Middlewares are added using the `wrap` method on `App`
@@ -124,13 +131,14 @@ async fn run(app_server_params: AppServerParams) -> Result<Server, anyhow::Error
             .route("/", web::get().to(home))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
-            .route("/newsletters", web::post().to(publish_newsletter))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             .service(
                 web::scope("/admin")
                     .wrap(from_fn(reject_anonymous_users))
                     .route("/dashboard", web::get().to(admin_dashboard))
+                    .route("/newsletters", web::get().to(publish_newsletter_form))
+                    .route("/newsletters", web::post().to(publish_newsletter))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password))
                     .route("/logout", web::post().to(log_out)),
