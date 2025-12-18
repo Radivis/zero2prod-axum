@@ -76,8 +76,26 @@ pub struct TestApp {
     pub port: u16,
     pub db_connection_pool: PgPool,
     pub email_server: MockServer,
-    pub test_user: TestUser,
     pub api_client: reqwest::Client,
+}
+
+pub struct TestAppContainerWithUser {
+    pub app: TestApp,
+    pub test_user: TestUser,
+}
+
+impl TestAppContainerWithUser {
+    pub async fn login(self) -> Self {
+        let response = self
+            .app
+            .post_login(&serde_json::json!({
+                "username": self.test_user.username,
+                "password": self.test_user.password
+            }))
+            .await;
+        assert_is_redirect_to(&response, "/admin/dashboard");
+        self
+    }
 }
 
 impl TestApp {
@@ -212,6 +230,15 @@ impl TestApp {
             .expect("Failed to create test users.");
         (row.username, row.password_hash)
     }
+
+    pub async fn make_container_with_user(self) -> TestAppContainerWithUser {
+        let test_user = TestUser::generate();
+        test_user.store(&self.db_connection_pool).await;
+        TestAppContainerWithUser {
+            app: self,
+            test_user,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -229,6 +256,7 @@ impl TestUser {
             password: Uuid::new_v4().to_string(),
         }
     }
+
     async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
         // Match parameters of the default password
@@ -291,20 +319,18 @@ pub async fn spawn_app() -> TestApp {
         .build()
         .unwrap();
 
-    let test_app = TestApp {
+    TestApp {
         address,
         port,
         db_connection_pool,
         email_server,
-        test_user: TestUser::generate(),
         api_client,
-    };
+    }
+}
 
-    test_app.test_user.store(&test_app.db_connection_pool).await;
-
-    tracing::debug!("test_app spawned with details: {:?}", &test_app);
-
-    test_app
+#[tracing::instrument(name = "Spawning test application with user")]
+pub async fn spawn_app_container_with_user() -> TestAppContainerWithUser {
+    spawn_app().await.make_container_with_user().await
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {

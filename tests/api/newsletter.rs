@@ -3,28 +3,23 @@ use wiremock::{Mock, ResponseTemplate, Times};
 
 use crate::helpers::{
     ConfirmationLinks, TestApp, assert_is_redirect_to, mount_mock_email_server, spawn_app,
+    spawn_app_container_with_user,
 };
 
 #[tokio::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Arrange
-    let app = spawn_app().await;
-    create_unconfirmed_subscriber(&app).await;
+    let container = spawn_app_container_with_user().await.login().await;
+    create_unconfirmed_subscriber(&container.app).await;
 
     // No request is supposed to hit our email server mirroring no newsletter being sent!
     let times: Times = 0.into();
-    let _ = mount_mock_email_server(&app.email_server, Some(times)).await;
-
-    // Act - Part 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": &app.test_user.username,
-        "password": &app.test_user.password
-    }))
-    .await;
+    let _ = mount_mock_email_server(&container.app.email_server, Some(times)).await;
 
     // Act
     // Use the fact that there are no confirmed subscribers at all at this stage!
-    let response = app
+    let response = container
+        .app
         .post_newsletters(&serde_json::json!({
             "title": "Newsletter title",
             "text_content": "Newsletter body as plain text",
@@ -40,20 +35,14 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
 #[tokio::test]
 async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // Arrange
-    let app = spawn_app().await;
-    create_confirmed_subscriber(&app).await;
+    let container = spawn_app_container_with_user().await.login().await;
+    create_confirmed_subscriber(&container.app).await;
     let times: Times = 1.into();
-    let _ = mount_mock_email_server(&app.email_server, Some(times)).await;
-
-    // Act - Part 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": &app.test_user.username,
-        "password": &app.test_user.password
-    }))
-    .await;
+    let _ = mount_mock_email_server(&container.app.email_server, Some(times)).await;
 
     // Act
-    let response = app
+    let response = container
+        .app
         .post_newsletters(&serde_json::json!({
             "title": "Newsletter title",
             "text_content": "Newsletter body as plain text",
@@ -69,7 +58,7 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 #[tokio::test]
 async fn newsletters_returns_400_for_invalid_data() {
     // Arrange
-    let app = spawn_app().await;
+    let container = spawn_app_container_with_user().await.login().await;
     let test_cases = vec![
         (
             serde_json::json!({
@@ -84,15 +73,9 @@ async fn newsletters_returns_400_for_invalid_data() {
         ),
     ];
 
-    // Act - Part 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": &app.test_user.username,
-        "password": &app.test_user.password
-    }))
-    .await;
-
+    // Act
     for (invalid_body, error_message) in test_cases {
-        let response = app.post_newsletters(&invalid_body).await;
+        let response = container.app.post_newsletters(&invalid_body).await;
 
         // Assert
         assert_eq!(
@@ -118,10 +101,11 @@ async fn you_must_be_logged_in_to_send_newsletters_form() {
 #[tokio::test]
 async fn you_must_be_logged_in_to_send_newsletters() {
     // Arrange
-    let app = spawn_app().await;
+    let container = spawn_app_container_with_user().await;
 
     // Act
-    let response = app
+    let response = container
+        .app
         .post_newsletters(&serde_json::json!({
             "title": "Test-Title",
             "html_content": "<i>This is content!</i>",
@@ -130,6 +114,45 @@ async fn you_must_be_logged_in_to_send_newsletters() {
         .await;
     // Assert
     assert_is_redirect_to(&response, "/login");
+}
+
+#[tokio::test]
+async fn newsletter_creation_is_idempotent() {
+    // Arrange
+    let container = spawn_app_container_with_user().await.login().await;
+    create_confirmed_subscriber(&container.app).await;
+
+    let times: Times = 1.into();
+    let _ = mount_mock_email_server(&container.app.email_server, Some(times)).await;
+
+    // Act - Part 1 - Submit newsletter form
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        // We expect the idempotency key as part of the
+        // form data, not as an header
+        "idempotency_key": uuid::Uuid::new_v4().to_string()
+    });
+    let response = container
+        .app
+        .post_newsletters(&newsletter_request_body)
+        .await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+    // Act - Part 2 - Follow the redirect
+    let html_page = container.app.get_newsletters().await.text().await.unwrap();
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    // Act - Part 3 - Submit newsletter form **again**
+    let response = container
+        .app
+        .post_newsletters(&newsletter_request_body)
+        .await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+    // Act - Part 4 - Follow the redirect
+    let html_page = container.app.get_newsletters().await.text().await.unwrap();
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
+    // Mock verifies on Drop that we have sent the newsletter email **once**
 }
 
 /// Use the public API of the application under test to create

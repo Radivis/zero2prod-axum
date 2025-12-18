@@ -1,4 +1,4 @@
-use crate::helpers::{assert_is_redirect_to, spawn_app};
+use crate::helpers::{assert_is_redirect_to, spawn_app, spawn_app_container_with_user};
 
 #[tokio::test]
 async fn an_error_flash_message_is_set_on_failure() {
@@ -27,16 +27,16 @@ async fn an_error_flash_message_is_set_on_failure() {
 #[tokio::test]
 async fn redirect_to_admin_dashboard_after_login_success() {
     // Arrange
-    let app = spawn_app().await;
+    let container = spawn_app_container_with_user().await;
     // Act - Part 1 - Login
     let login_body = serde_json::json!({
-        "username": &app.test_user.username,
-        "password": &app.test_user.password
+        "username": &container.test_user.username,
+        "password": &container.test_user.password
     });
-    let response = app.post_login(&login_body).await;
+    let response = container.app.post_login(&login_body).await;
     assert_is_redirect_to(&response, "/admin/dashboard");
 
     // Act - Part 2 - Follow the redirect
-    let html_page = app.get_admin_dashboard_html().await;
-    assert!(html_page.contains(&format!("Welcome {}", app.test_user.username)));
+    let html_page = container.app.get_admin_dashboard_html().await;
+    assert!(html_page.contains(&format!("Welcome {}", container.test_user.username)));
 }
