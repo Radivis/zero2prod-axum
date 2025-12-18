@@ -24,11 +24,17 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
             "title": "Newsletter title",
             "text_content": "Newsletter body as plain text",
             "html_content": "<p>Newsletter body as HTML</p>",
+            "idempotency_key": uuid::Uuid::new_v4().to_string()
         }))
         .await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(response.status().as_u16(), 303);
+
+    // Act - Part 2 - Follow the redirect
+    let html_page = container.app.get_newsletters().await.text().await.unwrap();
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
     // Mock verifies on Drop that we haven't sent the newsletter email
 }
 
@@ -47,12 +53,17 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
             "title": "Newsletter title",
             "text_content": "Newsletter body as plain text",
             "html_content": "<p>Newsletter body as HTML</p>",
+            "idempotency_key": uuid::Uuid::new_v4().to_string()
         }))
         .await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(response.status().as_u16(), 303);
     // Mock verifies on Drop that we have sent the newsletter email
+
+    // Act - Part 2 - Follow the redirect
+    let html_page = container.app.get_newsletters().await.text().await.unwrap();
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
 }
 
 #[tokio::test]
@@ -110,6 +121,7 @@ async fn you_must_be_logged_in_to_send_newsletters() {
             "title": "Test-Title",
             "html_content": "<i>This is content!</i>",
             "text_content": "This is content!",
+            "idempotency_key": uuid::Uuid::new_v4().to_string()
         }))
         .await;
     // Assert
@@ -139,15 +151,18 @@ async fn newsletter_creation_is_idempotent() {
         .post_newsletters(&newsletter_request_body)
         .await;
     assert_is_redirect_to(&response, "/admin/newsletters");
+
     // Act - Part 2 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
     // Act - Part 3 - Submit newsletter form **again**
     let response = container
         .app
         .post_newsletters(&newsletter_request_body)
         .await;
     assert_is_redirect_to(&response, "/admin/newsletters");
+
     // Act - Part 4 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
