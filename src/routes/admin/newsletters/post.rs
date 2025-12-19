@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmailAddress;
 use crate::email_client::{EmailClient, EmailData};
-use crate::idempotency::{IdempotencyKey, get_saved_response, save_response};
+use crate::idempotency::{IdempotencyKey, NextAction, save_response, try_processing};
 use crate::telemetry::error_chain_fmt;
 use crate::utils::see_other;
 
@@ -59,6 +59,10 @@ impl ResponseError for PublishError {
     }
 }
 
+fn success_message() -> FlashMessage {
+    FlashMessage::info("The newsletter issue has been published!")
+}
+
 #[tracing::instrument(
     name = "Publish Newsletter",
     skip(form, db_connection_pool, user_id)
@@ -79,17 +83,17 @@ pub async fn publish_newsletter(
     } = form.0;
     let idempotency_key: IdempotencyKey = idempotency_key.try_into()?;
     let user_id = user_id.into_inner();
-    // Return early if we have a saved response in the database
-    if let Some(saved_response) =
-        get_saved_response(&db_connection_pool, &idempotency_key, *user_id).await?
-    {
-        tracing::info!(
-            "Returning saved response due to idempotency: {:?}",
-            saved_response
-        );
-        FlashMessage::info("The newsletter issue has been published!").send();
-        return Ok(saved_response);
-    }
+    let transaction = match try_processing(&db_connection_pool, &idempotency_key, *user_id).await? {
+        NextAction::StartProcessing(t) => t,
+        NextAction::ReturnSavedResponse(saved_response) => {
+            tracing::info!(
+                "Returning saved response due to idempotency: {:?}",
+                saved_response
+            );
+            success_message().send();
+            return Ok(saved_response);
+        }
+    };
 
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
     let subscribers = get_confirmed_subscribers(&db_connection_pool).await?;
@@ -127,9 +131,9 @@ pub async fn publish_newsletter(
             }
         }
     }
-    FlashMessage::info("The newsletter issue has been published!").send();
+    success_message().send();
     let response = see_other("/admin/newsletters");
-    let response = save_response(&db_connection_pool, &idempotency_key, *user_id, response).await?;
+    let response = save_response(transaction, &idempotency_key, *user_id, response).await?;
     Ok(response)
 }
 
