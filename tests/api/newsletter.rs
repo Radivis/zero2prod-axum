@@ -1,14 +1,13 @@
+use crate::helpers::{
+    ConfirmationLinks, TestApp, assert_is_redirect_to, mount_mock_email_server, spawn_app,
+    spawn_app_container_with_user,
+};
 use fake::Fake;
 use fake::faker::internet::en::SafeEmail;
 use fake::faker::name::en::Name;
 use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockBuilder, ResponseTemplate, Times};
-
-use crate::helpers::{
-    ConfirmationLinks, TestApp, assert_is_redirect_to, mount_mock_email_server, spawn_app,
-    spawn_app_container_with_user,
-};
 
 // Shorthand for a common mocking setup
 fn when_sending_an_email() -> MockBuilder {
@@ -219,6 +218,88 @@ async fn concurrent_form_submission_is_handled_gracefully() {
 
     container.app.dispatch_all_pending_emails().await;
     // Mock verifies on Drop that we have sent the newsletter email **once**
+}
+
+#[tokio::test]
+async fn newsletter_are_sent_again_after_idempotency_key_expiry() {
+    // Arrange
+    let container = spawn_app_container_with_user().await.login().await;
+    create_confirmed_subscriber(&container.app).await;
+
+    let times: Times = 2.into();
+    let _ = mount_mock_email_server(&container.app.email_server, Some(times)).await;
+
+    // Act - Submit two newsletter forms with a time difference > 24 h
+    let idempotency_key = uuid::Uuid::new_v4().to_string();
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": idempotency_key
+    });
+    let response1 = container
+        .app
+        .post_newsletters(&newsletter_request_body)
+        .await;
+    let expired_timestamp = chrono::Utc::now() - chrono::Duration::hours(25);
+    let user_id = container.test_user.user_id;
+    let idempotency_key_ref: &str = idempotency_key.as_ref();
+
+    tracing::debug!(
+        "Updating idempotency key {} for user {} to timestamp {}",
+        idempotency_key_ref,
+        user_id,
+        expired_timestamp
+    );
+
+    let keys = sqlx::query!(
+        r#"
+        SELECT user_id, idempotency_key, created_at
+        FROM idempotency
+        "#
+    )
+    .fetch_all(&container.app.db_connection_pool)
+    .await
+    .expect("Failed to fetch idempotency");
+
+    for key in keys {
+        tracing::debug!("Idempotency key record: {:?}", key);
+    }
+
+    let result = sqlx::query!(
+        r#"
+        UPDATE idempotency
+        SET
+            created_at = $1
+        WHERE
+            user_id = $2 AND
+            idempotency_key = $3
+        "#,
+        expired_timestamp,
+        user_id,
+        idempotency_key_ref,
+    )
+    .execute(&container.app.db_connection_pool)
+    .await
+    .expect("Failed to update idempotency");
+
+    if result.rows_affected() == 0 {
+        panic!("Idempotency update failed!");
+    }
+
+    let response2 = container
+        .app
+        .post_newsletters(&newsletter_request_body)
+        .await;
+
+    assert_eq!(response1.status(), response2.status());
+    assert_eq!(
+        response1.text().await.unwrap(),
+        response2.text().await.unwrap()
+    );
+
+    container.app.dispatch_all_pending_emails().await;
+    // Mock verifies on Drop that we have sent the newsletter email **twice**
 }
 
 /// Use the public API of the application under test to create

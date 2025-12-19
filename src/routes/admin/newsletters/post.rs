@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmailAddress;
-use crate::email_client::EmailClient;
 use crate::idempotency::{IdempotencyKey, NextAction, save_response, try_processing};
 use crate::telemetry::error_chain_fmt;
 use crate::utils::see_other;
@@ -76,7 +75,6 @@ fn success_message() -> FlashMessage {
 pub async fn publish_newsletter(
     form: web::Form<SendNewsletterFormData>,
     db_connection_pool: web::Data<PgPool>,
-    email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, PublishError> {
     // We must destructure the form to avoid upsetting the borrow-checker
@@ -113,38 +111,7 @@ pub async fn publish_newsletter(
     enqueue_delivery_tasks(&mut transaction, issue_id)
         .await
         .context("Failed to enqueue delivery tasks")?;
-    /*
-    let subject = &title;
-    let html_content = &html_content;
-    let text_content = &text_content;
-    for subscriber in subscribers {
-        match subscriber {
-            Ok(subscriber) => {
-                let recipient = &subscriber.email;
-                email_client
-                    .send_email(EmailData {
-                        recipient,
-                        subject,
-                        html_content,
-                        text_content,
-                    })
-                    .await
-                    .with_context(|| format!("Failed to send newsletter issue to {}", recipient))?;
-            }
-            Err(error) => {
-                tracing::warn!(
-                    // We record the error chain as a structured field
-                    // on the log record.
-                    error.cause_chain = ?error,
-                    // Using `\` to split a long string literal over
-                    // two lines, without creating a `\n` character.
-                    "Skipping a confirmed subscriber. \
-                    Their stored contact details are invalid",
-                );
-            }
-        }
-    }
-     */
+
     success_message().send();
     let response = see_other("/admin/newsletters");
     let response = save_response(transaction, &idempotency_key, *user_id, response).await?;

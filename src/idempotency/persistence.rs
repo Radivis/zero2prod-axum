@@ -2,6 +2,7 @@ use super::IdempotencyKey;
 use actix_web::HttpResponse;
 use actix_web::body::to_bytes;
 use actix_web::http::StatusCode;
+use chrono::{Duration, Utc};
 use sqlx::{Executor, PgPool};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -42,10 +43,24 @@ pub async fn try_processing(
     if n_inserted_rows > 0 {
         Ok(NextAction::StartProcessing(transaction))
     } else {
-        let saved_response = get_saved_response(pool, idempotency_key, user_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("We expected a saved response, we didn't find it"))?;
-        Ok(NextAction::ReturnSavedResponse(saved_response))
+        let saved_response = get_saved_response(pool, idempotency_key, user_id).await?;
+        match saved_response {
+            Some(saved_response) => {
+                // Internal sentinel: we use 408 to signal "idempotency key expired"
+                // This is safe because:
+                // - Our endpoint never legitimately returns 408
+                // - If it did (timeout), retrying is the correct action anyway
+                // - Clients treat 408 as retryable
+                match saved_response.status() {
+                    StatusCode::REQUEST_TIMEOUT => Ok(NextAction::StartProcessing(transaction)),
+                    _ => Ok(NextAction::ReturnSavedResponse(saved_response)),
+                }
+            }
+            None => {
+                tracing::warn!("Saved response could not be retrieved");
+                Ok(NextAction::StartProcessing(transaction))
+            }
+        }
     }
 }
 
@@ -57,6 +72,7 @@ pub async fn get_saved_response(
     let saved_response = sqlx::query!(
         r#"
         SELECT
+            created_at,
             response_status_code as "response_status_code!",
             response_headers as "response_headers!: Vec<HeaderPairRecord>",
             response_body as "response_body!"
@@ -71,6 +87,14 @@ pub async fn get_saved_response(
     .fetch_optional(pool)
     .await?;
     if let Some(r) = saved_response {
+        let now = Utc::now();
+        if r.created_at < now - Duration::hours(24) {
+            tracing::info!("Idempotency key expired - deleting idempotency record");
+            delete_saved_response(pool, idempotency_key, user_id).await?;
+            return Ok(Some(
+                HttpResponse::build(StatusCode::REQUEST_TIMEOUT).body(""),
+            ));
+        }
         let status_code = StatusCode::from_u16(r.response_status_code.try_into()?)?;
         let mut response = HttpResponse::build(status_code);
         for HeaderPairRecord { name, value } in r.response_headers {
@@ -79,6 +103,30 @@ pub async fn get_saved_response(
         Ok(Some(response.body(r.response_body)))
     } else {
         Ok(None)
+    }
+}
+
+async fn delete_saved_response(
+    pool: &PgPool,
+    idempotency_key: &IdempotencyKey,
+    user_id: Uuid,
+) -> Result<(), anyhow::Error> {
+    let query_result = sqlx::query!(
+        r#"
+        DELETE FROM idempotency
+        WHERE
+        user_id = $1 AND
+        idempotency_key = $2
+        "#,
+        user_id,
+        idempotency_key.as_ref()
+    )
+    .execute(pool)
+    .await?;
+    if query_result.rows_affected() == 0 {
+        Err(anyhow::anyhow!("Could not delete saved response!"))
+    } else {
+        Ok(())
     }
 }
 
