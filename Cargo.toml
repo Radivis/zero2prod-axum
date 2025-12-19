@@ -58,6 +58,7 @@ linkify = "0.10"
 quickcheck = "1.0.3"
 quickcheck_macros = "1"
 serde_json = "1"
+serde_urlencoded = "0.7.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "ansi"] }
 wiremock = "0.6"

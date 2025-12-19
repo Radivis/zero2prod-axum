@@ -1,11 +1,22 @@
+use fake::Fake;
+use fake::faker::internet::en::SafeEmail;
+use fake::faker::name::en::Name;
 use std::time::Duration;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, ResponseTemplate, Times};
+use wiremock::{Mock, MockBuilder, ResponseTemplate, Times};
 
 use crate::helpers::{
     ConfirmationLinks, TestApp, assert_is_redirect_to, mount_mock_email_server, spawn_app,
     spawn_app_container_with_user,
 };
+
+// Shorthand for a common mocking setup
+fn when_sending_an_email() -> MockBuilder {
+    Mock::given(path("/email")).and(method("POST"))
+}
+
+const NEWSLETTER_CONFIRMATION_MESSAGE: &str = "<p><i>The newsletter issue has been accepted - \
+emails will go out shortly.</i></p>";
 
 #[tokio::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
@@ -34,7 +45,9 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
 
     // Act - Part 2 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
+
+    container.app.dispatch_all_pending_emails().await;
 
     // Mock verifies on Drop that we haven't sent the newsletter email
 }
@@ -60,11 +73,13 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 
     // Assert
     assert_eq!(response.status().as_u16(), 303);
-    // Mock verifies on Drop that we have sent the newsletter email
 
     // Act - Part 2 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
+
+    container.app.dispatch_all_pending_emails().await;
+    // Mock verifies on Drop that we have sent the newsletter email
 }
 
 #[tokio::test]
@@ -155,7 +170,7 @@ async fn newsletter_creation_is_idempotent() {
 
     // Act - Part 2 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
 
     // Act - Part 3 - Submit newsletter form **again**
     let response = container
@@ -166,8 +181,9 @@ async fn newsletter_creation_is_idempotent() {
 
     // Act - Part 4 - Follow the redirect
     let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
 
+    container.app.dispatch_all_pending_emails().await;
     // Mock verifies on Drop that we have sent the newsletter email **once**
 }
 
@@ -177,8 +193,7 @@ async fn concurrent_form_submission_is_handled_gracefully() {
     let container = spawn_app_container_with_user().await.login().await;
     create_confirmed_subscriber(&container.app).await;
 
-    Mock::given(path("/email"))
-        .and(method("POST"))
+    when_sending_an_email()
         // Setting a long delay to ensure that the second request
         // arrives before the first one completes
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
@@ -201,23 +216,30 @@ async fn concurrent_form_submission_is_handled_gracefully() {
         response1.text().await.unwrap(),
         response2.text().await.unwrap()
     );
+
+    container.app.dispatch_all_pending_emails().await;
     // Mock verifies on Drop that we have sent the newsletter email **once**
 }
 
 /// Use the public API of the application under test to create
 /// an unconfirmed subscriber.
 async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let name: String = Name().fake();
+    let email: String = SafeEmail().fake();
+    let body = serde_urlencoded::to_string(serde_json::json!({
+        "name": name,
+        "email": email
+    }))
+    .unwrap();
 
     // One confirmation mail should be sent
-    let _mock_guard = Mock::given(path("/email"))
-        .and(method("POST"))
+    let _mock_guard = when_sending_an_email()
         .respond_with(ResponseTemplate::new(200))
         .named("Create unconfirmed subscriber")
         .expect(1)
         .mount_as_scoped(&app.email_server)
         .await;
-    app.post_subscriptions(body.into())
+    app.post_subscriptions(body)
         .await
         .error_for_status()
         .unwrap();

@@ -10,6 +10,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate, Times};
 
 use zero2prod::configuration::{DatabaseSettings, get_configuration};
+use zero2prod::email_client::EmailClient;
+use zero2prod::issue_delivery_worker::{ExecutionOutcome, try_execute_task};
 use zero2prod::startup::Application;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
@@ -75,6 +77,7 @@ pub struct TestApp {
     pub address: String,
     pub port: u16,
     pub db_connection_pool: PgPool,
+    pub email_client: EmailClient,
     pub email_server: MockServer,
     pub api_client: reqwest::Client,
 }
@@ -99,6 +102,18 @@ impl TestAppContainerWithUser {
 }
 
 impl TestApp {
+    pub async fn dispatch_all_pending_emails(&self) {
+        loop {
+            if let ExecutionOutcome::EmptyQueue =
+                try_execute_task(&self.db_connection_pool, &self.email_client)
+                    .await
+                    .unwrap()
+            {
+                break;
+            }
+        }
+    }
+
     // Our tests will only look at the HTML page, therefore
     // we do not expose the underlying reqwest::Response
 
@@ -323,6 +338,7 @@ pub async fn spawn_app() -> TestApp {
         address,
         port,
         db_connection_pool,
+        email_client: configuration.email_client.client(),
         email_server,
         api_client,
     }
