@@ -1,3 +1,4 @@
+/.cursor/
 /target
 .env
 !/scripts/README.md
