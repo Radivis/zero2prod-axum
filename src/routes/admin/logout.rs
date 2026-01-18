@@ -1,6 +1,6 @@
+use crate::flash_messages::FlashMessageSender;
 use crate::session_state::TypedSession;
 use axum::response::Redirect;
-use crate::flash_messages::FlashMessageSender;
 use tower_sessions::Session;
 
 pub async fn log_out(session: Session) -> Redirect {

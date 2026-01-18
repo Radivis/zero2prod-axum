@@ -1,9 +1,9 @@
 use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
 use axum::http::StatusCode;
-use tower_sessions::Session;
+use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use tower_sessions::Session;
 
 const FLASH_MESSAGES_KEY: &str = "_flash_messages";
 
@@ -63,7 +63,8 @@ impl FlashMessageSender {
     }
 
     pub async fn send(&self, message: FlashMessage) -> Result<(), tower_sessions::session::Error> {
-        let mut messages: VecDeque<FlashMessage> = match self.session.get(FLASH_MESSAGES_KEY).await {
+        let mut messages: VecDeque<FlashMessage> = match self.session.get(FLASH_MESSAGES_KEY).await
+        {
             Ok(Some(msgs)) => msgs,
             Ok(None) => VecDeque::new(),
             Err(e) => return Err(e),
@@ -73,7 +74,10 @@ impl FlashMessageSender {
         Ok(())
     }
 
-    pub async fn error(&self, content: impl Into<String>) -> Result<(), tower_sessions::session::Error> {
+    pub async fn error(
+        &self,
+        content: impl Into<String>,
+    ) -> Result<(), tower_sessions::session::Error> {
         self.send(FlashMessage {
             level: "error".to_string(),
             content: content.into(),
@@ -81,7 +85,10 @@ impl FlashMessageSender {
         .await
     }
 
-    pub async fn info(&self, content: impl Into<String>) -> Result<(), tower_sessions::session::Error> {
+    pub async fn info(
+        &self,
+        content: impl Into<String>,
+    ) -> Result<(), tower_sessions::session::Error> {
         self.send(FlashMessage {
             level: "info".to_string(),
             content: content.into(),

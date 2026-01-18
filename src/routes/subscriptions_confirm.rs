@@ -1,7 +1,7 @@
+use crate::startup::AppState;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use crate::startup::AppState;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -9,14 +9,8 @@ use uuid::Uuid;
 pub struct Parameters {
     subscription_token: String,
 }
-#[tracing::instrument(
-    name = "Mark subscriber as confirmed",
-    skip(subscriber_id, db)
-)]
-pub async fn confirm_subscriber(
-    db: &sqlx::PgPool,
-    subscriber_id: Uuid,
-) -> Result<(), sqlx::Error> {
+#[tracing::instrument(name = "Mark subscriber as confirmed", skip(subscriber_id, db))]
+pub async fn confirm_subscriber(db: &sqlx::PgPool, subscriber_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"UPDATE subscriptions SET status = 'confirmed' WHERE id = $1"#,
         subscriber_id,
@@ -30,10 +24,7 @@ pub async fn confirm_subscriber(
     Ok(())
 }
 
-#[tracing::instrument(
-    name = "Get subscriber_id from token",
-    skip(subscription_token, db)
-)]
+#[tracing::instrument(name = "Get subscriber_id from token", skip(subscription_token, db))]
 pub async fn get_subscriber_id_from_token(
     db: &sqlx::PgPool,
     subscription_token: &str,
@@ -52,18 +43,13 @@ pub async fn get_subscriber_id_from_token(
     Ok(result.map(|r| r.subscriber_id))
 }
 
-#[tracing::instrument(
-    name = "Confirm a pending subscriber",
-    skip(parameters, state)
-)]
+#[tracing::instrument(name = "Confirm a pending subscriber", skip(parameters, state))]
 pub async fn confirm(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
 ) -> impl IntoResponse {
     let subscriber_id =
-        match get_subscriber_id_from_token(&state.db, &parameters.subscription_token)
-            .await
-        {
+        match get_subscriber_id_from_token(&state.db, &parameters.subscription_token).await {
             Ok(subscriber_id) => subscriber_id,
             Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
         };
@@ -71,10 +57,7 @@ pub async fn confirm(
         // Non-existing token!
         None => StatusCode::UNAUTHORIZED,
         Some(subscriber_id_) => {
-            if confirm_subscriber(&state.db, subscriber_id_)
-                .await
-                .is_err()
-            {
+            if confirm_subscriber(&state.db, subscriber_id_).await.is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR;
             }
             StatusCode::OK

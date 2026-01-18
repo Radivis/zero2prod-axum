@@ -1,10 +1,10 @@
+use crate::flash_messages::FlashMessageSender;
+use crate::startup::AppState;
+use anyhow::Context;
 use axum::extract::{Form, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use tower_sessions::Session;
-use crate::flash_messages::FlashMessageSender;
-use crate::startup::AppState;
-use anyhow::Context;
 
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
@@ -131,26 +131,26 @@ pub async fn publish_newsletter(
         html_content,
         idempotency_key,
     } = form;
-    let idempotency_key: IdempotencyKey = idempotency_key.try_into()
-        .map_err(|e| PublishError::UnexpectedError(anyhow::anyhow!("Invalid idempotency key: {}", e)))?;
-    let mut transaction =
-        match try_processing(&state.db, &idempotency_key, *user_id).await? {
-            NextAction::StartProcessing(t) => t,
-            NextAction::ReturnSavedResponse(saved_response) => {
-                tracing::info!(
-                    "Returning saved response due to idempotency: {:?}",
-                    saved_response.status()
-                );
-                let flash_sender = FlashMessageSender::new(session.clone());
-                if let Err(e) = flash_sender
-                    .info("The newsletter issue has been accepted - emails will go out shortly.")
-                    .await
-                {
-                    tracing::error!("Failed to set flash message: {:?}", e);
-                }
-                return Ok(saved_response);
+    let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(|e| {
+        PublishError::UnexpectedError(anyhow::anyhow!("Invalid idempotency key: {}", e))
+    })?;
+    let mut transaction = match try_processing(&state.db, &idempotency_key, *user_id).await? {
+        NextAction::StartProcessing(t) => t,
+        NextAction::ReturnSavedResponse(saved_response) => {
+            tracing::info!(
+                "Returning saved response due to idempotency: {:?}",
+                saved_response.status()
+            );
+            let flash_sender = FlashMessageSender::new(session.clone());
+            if let Err(e) = flash_sender
+                .info("The newsletter issue has been accepted - emails will go out shortly.")
+                .await
+            {
+                tracing::error!("Failed to set flash message: {:?}", e);
             }
-        };
+            return Ok(saved_response);
+        }
+    };
 
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
     let subscribers = get_confirmed_subscribers(&state.db).await?;
@@ -180,13 +180,10 @@ pub async fn publish_newsletter(
 impl IntoResponse for PublishError {
     fn into_response(self) -> Response {
         match self {
-            PublishError::UnexpectedError(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
+            PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublishError::AuthError(_) => {
                 let mut headers = axum::http::HeaderMap::new();
-                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#)
-                    .unwrap();
+                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
                 headers.insert(header::WWW_AUTHENTICATE, header_value);
                 (StatusCode::UNAUTHORIZED, headers).into_response()
             }

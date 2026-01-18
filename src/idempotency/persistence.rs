@@ -1,8 +1,8 @@
 use super::IdempotencyKey;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use http_body_util::BodyExt;
 use chrono::{Duration, Utc};
+use http_body_util::BodyExt;
 use sqlx::{Executor, PgPool};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -71,9 +71,7 @@ pub async fn get_saved_response(
         if r.created_at < now - Duration::hours(24) {
             tracing::info!("Idempotency key expired - deleting idempotency record");
             delete_saved_response(pool, idempotency_key, user_id).await?;
-            return Ok(Some(
-                (StatusCode::REQUEST_TIMEOUT, "").into_response()
-            ));
+            return Ok(Some((StatusCode::REQUEST_TIMEOUT, "").into_response()));
         }
         let status_code = StatusCode::from_u16(r.response_status_code.try_into()?)?;
         let mut headers = HeaderMap::new();
@@ -85,7 +83,9 @@ pub async fn get_saved_response(
                 headers.insert(name, value);
             }
         }
-        Ok(Some((status_code, headers, r.response_body).into_response()))
+        Ok(Some(
+            (status_code, headers, r.response_body).into_response(),
+        ))
     } else {
         Ok(None)
     }
@@ -119,9 +119,7 @@ pub async fn try_processing(
             Some(saved_response) => {
                 // Internal sentinel: we use 408 to signal "idempotency key expired"
                 match saved_response.status() {
-                    StatusCode::REQUEST_TIMEOUT => {
-                        Ok(NextAction::StartProcessing(transaction))
-                    }
+                    StatusCode::REQUEST_TIMEOUT => Ok(NextAction::StartProcessing(transaction)),
                     _ => Ok(NextAction::ReturnSavedResponse(saved_response)),
                 }
             }

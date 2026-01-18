@@ -1,10 +1,8 @@
-use axum::response::Html;
 use crate::flash_messages::IncomingFlashMessages;
+use axum::response::Html;
 use std::fmt::Write;
 
-pub async fn change_password_form(
-    flash_messages: IncomingFlashMessages,
-) -> Html<String> {
+pub async fn change_password_form(flash_messages: IncomingFlashMessages) -> Html<String> {
     let mut msg_html = String::new();
     for m in flash_messages.0.iter() {
         writeln!(msg_html, "<p><i>{}</i></p>", m.content).unwrap();

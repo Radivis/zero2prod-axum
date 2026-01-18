@@ -1,8 +1,8 @@
 use crate::authentication::UserId;
-use axum::extract::State;
-use axum::response::Html;
 use crate::startup::AppState;
 use anyhow::Context;
+use axum::extract::State;
+use axum::response::Html;
 use uuid::Uuid;
 
 #[tracing::instrument(name = "Get username", skip(pool))]
