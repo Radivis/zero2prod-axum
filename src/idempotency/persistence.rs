@@ -114,18 +114,26 @@ pub async fn try_processing(
     if n_inserted_rows > 0 {
         Ok(NextAction::StartProcessing(transaction))
     } else {
+        // Roll back unused transaction
+        transaction.rollback().await?;
         let saved_response = get_saved_response(pool, idempotency_key, user_id).await?;
         match saved_response {
             Some(saved_response) => {
                 // Internal sentinel: we use 408 to signal "idempotency key expired"
                 match saved_response.status() {
-                    StatusCode::REQUEST_TIMEOUT => Ok(NextAction::StartProcessing(transaction)),
+                    StatusCode::REQUEST_TIMEOUT => {
+                        // Start a new transaction for processing
+                        let new_transaction = pool.begin().await?;
+                        Ok(NextAction::StartProcessing(new_transaction))
+                    }
                     _ => Ok(NextAction::ReturnSavedResponse(saved_response)),
                 }
             }
             None => {
                 tracing::warn!("Saved response could not be retrieved");
-                Ok(NextAction::StartProcessing(transaction))
+                // Start a new transaction for processing
+                let new_transaction = pool.begin().await?;
+                Ok(NextAction::StartProcessing(new_transaction))
             }
         }
     }

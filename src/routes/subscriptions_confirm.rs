@@ -1,4 +1,6 @@
 use crate::startup::AppState;
+use crate::telemetry::error_chain_fmt;
+use anyhow::Context;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -43,24 +45,44 @@ pub async fn get_subscriber_id_from_token(
     Ok(result.map(|r| r.subscriber_id))
 }
 
+#[derive(thiserror::Error)]
+pub enum ConfirmError {
+    #[error("Invalid or expired subscription token")]
+    InvalidToken,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+impl std::fmt::Debug for ConfirmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
+    }
+}
+
+impl IntoResponse for ConfirmError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            ConfirmError::InvalidToken => StatusCode::UNAUTHORIZED,
+            ConfirmError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, self.to_string()).into_response()
+    }
+}
+
 #[tracing::instrument(name = "Confirm a pending subscriber", skip(parameters, state))]
 pub async fn confirm(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
-) -> impl IntoResponse {
-    let subscriber_id =
-        match get_subscriber_id_from_token(&state.db, &parameters.subscription_token).await {
-            Ok(subscriber_id) => subscriber_id,
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-        };
-    match subscriber_id {
-        // Non-existing token!
-        None => StatusCode::UNAUTHORIZED,
-        Some(subscriber_id_) => {
-            if confirm_subscriber(&state.db, subscriber_id_).await.is_err() {
-                return StatusCode::INTERNAL_SERVER_ERROR;
-            }
-            StatusCode::OK
-        }
-    }
+) -> Result<impl IntoResponse, ConfirmError> {
+    let subscriber_id = get_subscriber_id_from_token(&state.db, &parameters.subscription_token)
+        .await
+        .context("Failed to retrieve subscriber ID from token")?;
+
+    let subscriber_id = subscriber_id.ok_or(ConfirmError::InvalidToken)?;
+
+    confirm_subscriber(&state.db, subscriber_id)
+        .await
+        .context("Failed to confirm subscriber")?;
+
+    Ok(StatusCode::OK)
 }

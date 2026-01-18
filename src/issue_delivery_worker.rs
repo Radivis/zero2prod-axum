@@ -58,10 +58,9 @@ pub async fn try_execute_task(
     email_client: &EmailClient,
 ) -> Result<ExecutionOutcome, anyhow::Error> {
     let task = dequeue_task(pool).await?;
-    if task.is_none() {
+    let Some((transaction, issue_id, email)) = task else {
         return Ok(ExecutionOutcome::EmptyQueue);
-    }
-    let (transaction, issue_id, email) = task.unwrap();
+    };
     Span::current()
         .record("newsletter_issue_id", display(issue_id))
         .record("subscriber_email_address", display(&email));

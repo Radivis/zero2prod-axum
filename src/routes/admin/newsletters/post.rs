@@ -183,7 +183,7 @@ impl IntoResponse for PublishError {
             PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublishError::AuthError(_) => {
                 let mut headers = axum::http::HeaderMap::new();
-                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
+                let header_value = HeaderValue::from_static(r#"Basic realm="publish""#);
                 headers.insert(header::WWW_AUTHENTICATE, header_value);
                 (StatusCode::UNAUTHORIZED, headers).into_response()
             }
