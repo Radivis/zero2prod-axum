@@ -1,35 +1,11 @@
-use actix_session::{Session, SessionExt, SessionGetError, SessionInsertError};
-use actix_web::dev::Payload;
-use actix_web::{FromRequest, HttpRequest};
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use std::future::{Ready, ready};
 use uuid::Uuid;
+use tower_sessions::Session;
 
-pub struct TypedSession(Session);
-
-// Axum version
-pub struct TypedSessionAxum(pub tower_sessions::Session);
+pub struct TypedSession(pub Session);
 
 impl TypedSession {
-    const USER_ID_KEY: &'static str = "user_id";
-    pub fn renew(&self) {
-        self.0.renew();
-    }
-    pub fn insert_user_id(&self, user_id: Uuid) -> Result<(), SessionInsertError> {
-        self.0.insert(Self::USER_ID_KEY, user_id)
-    }
-
-    pub fn get_user_id(&self) -> Result<Option<Uuid>, SessionGetError> {
-        self.0.get(Self::USER_ID_KEY)
-    }
-
-    pub fn log_out(self) {
-        self.0.purge()
-    }
-}
-
-impl TypedSessionAxum {
     const USER_ID_KEY: &'static str = "user_id";
     
     pub async fn renew(&self) {
@@ -52,25 +28,7 @@ impl TypedSessionAxum {
     }
 }
 
-impl FromRequest for TypedSession {
-    // This is a complicated way of saying
-    // "We return the same error returned by the
-    // implementation of `FromRequest` for `Session`".
-    type Error = <Session as FromRequest>::Error;
-    // Rust does not yet support the `async` syntax in traits.
-    // From request expects a `Future` as return type to allow for extractors
-    // that need to perform asynchronous operations (e.g. a HTTP call)
-    // We do not have a `Future`, because we don't perform any I/O,
-    // so we wrap `TypedSession` into `Ready` to convert it into a `Future` that
-    // resolves to the wrapped value the first time it's polled by the executor.
-    type Future = Ready<Result<TypedSession, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        ready(Ok(TypedSession(req.get_session())))
-    }
-}
-
-impl<S> FromRequestParts<S> for TypedSessionAxum
+impl<S> FromRequestParts<S> for TypedSession
 where
     S: Send + Sync,
 {
@@ -81,6 +39,6 @@ where
             .get::<tower_sessions::Session>()
             .ok_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
             .clone();
-        Ok(TypedSessionAxum(session))
+        Ok(TypedSession(session))
     }
 }

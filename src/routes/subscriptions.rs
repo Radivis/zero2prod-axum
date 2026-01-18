@@ -1,16 +1,13 @@
 use crate::domain::{NewSubscriber, SubscriberEmailAddress, SubscriberName};
 use crate::email_client::{EmailClient, EmailData};
-use crate::startup::ApplicationBaseUrl;
-use crate::startup_axum::AppState;
+use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
-use actix_web::http::StatusCode;
-use actix_web::{HttpResponse, ResponseError, web};
 use anyhow::Context;
 use axum::extract::{Form, State};
-use axum::http::StatusCode as AxumStatusCode;
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use chrono::Utc;
-use sqlx::{Executor, PgPool, Postgres, Transaction};
+use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -80,21 +77,11 @@ impl From<String> for SubscribeError {
     }
 }
 
-impl ResponseError for SubscribeError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            SubscribeError::ValidationError(_) => StatusCode::BAD_REQUEST,
-            SubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-// Axum version
 impl axum::response::IntoResponse for SubscribeError {
     fn into_response(self) -> axum::response::Response {
         let status = match self {
-            SubscribeError::ValidationError(_) => axum::http::StatusCode::BAD_REQUEST,
-            SubscribeError::UnexpectedError(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            SubscribeError::ValidationError(_) => StatusCode::BAD_REQUEST,
+            SubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, self.to_string()).into_response()
     }
@@ -108,60 +95,13 @@ pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
 
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, db_connection_pool, email_client, base_url),
-    fields(
-        subscriber_email = %form.email,
-        subscriber_name = %form.name
-    )
-)]
-pub async fn subscribe(
-    form: web::Form<FormData>,
-    // Retrieving a connection from the application state!
-    db_connection_pool: web::Data<PgPool>,
-    email_client: web::Data<EmailClient>,
-    base_url: web::Data<ApplicationBaseUrl>,
-) -> Result<HttpResponse, SubscribeError> {
-    // TODO: Implement improvements suggested in chapter 7.9
-    // `web::Form` is a wrapper around `FormData`
-    // `form.0` gives us access to the underlying `FormData`
-    let new_subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
-    let mut transaction = db_connection_pool
-        .begin()
-        .await
-        .context("Failed to acquire a Postgres connection from the pool")?;
-    let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
-        .await
-        .context("Failed to insert new subscriber in the database.")?;
-    let subscription_token = Uuid::new_v4().simple().to_string();
-    store_token(&mut transaction, subscriber_id, &subscription_token)
-        .await
-        .context("Failed to store the confirmation token for a new subscriber.")?;
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit SQL transaction to store a new subscriber.")?;
-
-    send_confirmation_email(
-        &email_client,
-        new_subscriber,
-        &base_url.0,
-        &subscription_token,
-    )
-    .await
-    .context("Failed to send a confirmation email.")?;
-    Ok(HttpResponse::Ok().finish())
-}
-
-// Axum version
-#[tracing::instrument(
-    name = "Adding a new subscriber",
     skip(form, state),
     fields(
         subscriber_email = %form.email,
         subscriber_name = %form.name
     )
 )]
-pub async fn subscribe_axum(
+pub async fn subscribe(
     State(state): State<AppState>,
     Form(form): Form<FormData>,
 ) -> Result<impl IntoResponse, SubscribeError> {
@@ -191,7 +131,7 @@ pub async fn subscribe_axum(
     )
     .await
     .context("Failed to send a confirmation email.")?;
-    Ok(AxumStatusCode::OK)
+    Ok(StatusCode::OK)
 }
 
 #[tracing::instrument(

@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
     // Panic if we can't read configuration
     let configuration = get_configuration().expect("Failed to read configuration.");
     let application = Application::build(configuration.clone()).await?;
-    let application_task = tokio::spawn(application.run_until_stopped());
+    let application_task = tokio::spawn(application.run_until_stopped(configuration.clone()));
     let worker_task = tokio::spawn(run_worker_until_stopped(configuration));
 
     tokio::select! {

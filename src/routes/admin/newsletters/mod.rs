@@ -1,4 +1,4 @@
 mod post;
-pub use post::{publish_newsletter, publish_newsletter_axum};
+pub use post::publish_newsletter;
 mod get;
-pub use get::{publish_newsletter_form, publish_newsletter_form_axum};
+pub use get::publish_newsletter_form;

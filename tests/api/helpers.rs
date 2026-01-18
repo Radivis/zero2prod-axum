@@ -12,7 +12,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate, Times};
 use zero2prod::configuration::{DatabaseSettings, get_configuration};
 use zero2prod::email_client::EmailClient;
 use zero2prod::issue_delivery_worker::{ExecutionOutcome, try_execute_task};
-use zero2prod::startup_axum::Application;
+use zero2prod::startup::Application;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 // This holds the guard for the entire lifetime of the test process

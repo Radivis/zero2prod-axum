@@ -1,9 +1,7 @@
-use actix_web::{HttpResponse, web};
 use axum::extract::{Query, State};
-use axum::http::StatusCode as AxumStatusCode;
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use crate::startup_axum::AppState;
-use sqlx::PgPool;
+use crate::startup::AppState;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -12,48 +10,18 @@ pub struct Parameters {
     subscription_token: String,
 }
 #[tracing::instrument(
-    name = "Confirm a pending subscriber",
-    skip(parameters, db_connection_pool)
-)]
-pub async fn confirm(
-    parameters: web::Query<Parameters>,
-    db_connection_pool: web::Data<PgPool>,
-) -> HttpResponse {
-    let subscriber_id =
-        match get_subscriber_id_from_token(&db_connection_pool, &parameters.subscription_token)
-            .await
-        {
-            Ok(subscriber_id) => subscriber_id,
-            Err(_) => return HttpResponse::InternalServerError().finish(),
-        };
-    match subscriber_id {
-        // Non-existing token!
-        None => HttpResponse::Unauthorized().finish(),
-        Some(subscriber_id_) => {
-            if confirm_subscriber(&db_connection_pool, subscriber_id_)
-                .await
-                .is_err()
-            {
-                return HttpResponse::InternalServerError().finish();
-            }
-            HttpResponse::Ok().finish()
-        }
-    }
-}
-
-#[tracing::instrument(
     name = "Mark subscriber as confirmed",
-    skip(subscriber_id, db_connection_pool)
+    skip(subscriber_id, db)
 )]
 pub async fn confirm_subscriber(
-    db_connection_pool: &PgPool,
+    db: &sqlx::PgPool,
     subscriber_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"UPDATE subscriptions SET status = 'confirmed' WHERE id = $1"#,
         subscriber_id,
     )
-    .execute(db_connection_pool)
+    .execute(db)
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
@@ -64,10 +32,10 @@ pub async fn confirm_subscriber(
 
 #[tracing::instrument(
     name = "Get subscriber_id from token",
-    skip(subscription_token, db_connection_pool)
+    skip(subscription_token, db)
 )]
 pub async fn get_subscriber_id_from_token(
-    db_connection_pool: &PgPool,
+    db: &sqlx::PgPool,
     subscription_token: &str,
 ) -> Result<Option<Uuid>, sqlx::Error> {
     let result = sqlx::query!(
@@ -75,7 +43,7 @@ pub async fn get_subscriber_id_from_token(
         WHERE subscription_token = $1",
         subscription_token,
     )
-    .fetch_optional(db_connection_pool)
+    .fetch_optional(db)
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
@@ -84,12 +52,11 @@ pub async fn get_subscriber_id_from_token(
     Ok(result.map(|r| r.subscriber_id))
 }
 
-// Axum version
 #[tracing::instrument(
     name = "Confirm a pending subscriber",
     skip(parameters, state)
 )]
-pub async fn confirm_axum(
+pub async fn confirm(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
 ) -> impl IntoResponse {
@@ -98,19 +65,19 @@ pub async fn confirm_axum(
             .await
         {
             Ok(subscriber_id) => subscriber_id,
-            Err(_) => return AxumStatusCode::INTERNAL_SERVER_ERROR,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
         };
     match subscriber_id {
         // Non-existing token!
-        None => AxumStatusCode::UNAUTHORIZED,
+        None => StatusCode::UNAUTHORIZED,
         Some(subscriber_id_) => {
             if confirm_subscriber(&state.db, subscriber_id_)
                 .await
                 .is_err()
             {
-                return AxumStatusCode::INTERNAL_SERVER_ERROR;
+                return StatusCode::INTERNAL_SERVER_ERROR;
             }
-            AxumStatusCode::OK
+            StatusCode::OK
         }
     }
 }
