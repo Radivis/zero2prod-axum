@@ -1,12 +1,12 @@
 use axum::routing::{get, post};
 use axum::Router;
 use tower_sessions::SessionManagerLayer;
-// use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
+use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use tower_http::trace::TraceLayer;
-// use secrecy::ExposeSecret; // Unused for now, needed for Redis setup
+use secrecy::{ExposeSecret, Secret};
 
 use crate::authentication::UserId;
 use axum::extract::FromRequestParts;
@@ -36,16 +36,7 @@ pub struct AppState {
 
 pub struct Application {
     port: u16,
-    server: Server,
-}
-
-struct AppServerParams {
     listener: TcpListener,
-    connection_pool: PgPool,
-    email_client: EmailClient,
-    base_url: String,
-    hmac_secret: Secret<String>,
-    redis_uri: Secret<String>,
 }
 
 #[derive(Clone)]
@@ -69,15 +60,6 @@ impl Application {
         let listener = TcpListener::bind(address)?;
         listener.set_nonblocking(true)?; // Set listener to non-blocking
         let port = listener.local_addr()?.port();
-        let server = run(AppServerParams {
-            listener,
-            connection_pool,
-            email_client,
-            base_url: configuration.application.base_url,
-            hmac_secret: configuration.application.hmac_secret,
-            redis_uri: configuration.redis_uri,
-        })
-        .await?;
 
         Ok(Self { port, listener })
     }
@@ -99,31 +81,22 @@ impl Application {
             hmac_secret: HmacSecret(configuration.application.hmac_secret),
         };
 
-        // TODO: Switch to RedisStore for production
-        // Note: tower-sessions 0.12 + tower-sessions-redis-store 0.13 had serialization issues.
-        // With Axum 0.8 and tower-sessions 0.14, and tower-sessions-redis-store 0.16,
-        // the setup should now work.
-        //
-        // Example RedisStore setup:
-        // use tower_sessions_redis_store::fred::prelude::*;
-        // use tower_sessions_redis_store::RedisStore;
-        //
-        // let redis_url = configuration.redis_uri.expose_secret();
-        // let redis_config = RedisConfig::from_url(redis_url.as_str())
-        //     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Invalid Redis URL: {}", e)))?;
-        // let redis_client = Builder::from_config(redis_config).build()?;
-        // redis_client.connect();
-        // redis_client.wait_for_connect().await
-        //     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to connect to Redis: {}", e)))?;
-        //
-        // let session_store = RedisStore::new(redis_client);
-        // let session_layer = SessionManagerLayer::new(session_store)
-        //     .with_secure(false) // Set to true for HTTPS in production
-        //     .with_expiry(Expiry::OnInactivity(Duration::hours(1)));
-
-        // Temporary MemoryStore for development/testing
-        let session_store = tower_sessions::MemoryStore::default();
+        // Set up RedisStore with fred (compatible with both Redis and Valkey)
+        let redis_url = configuration.redis_uri.expose_secret();
+        let redis_config = Config::from_url(redis_url.as_str())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Invalid Redis URL: {}", e)))?;
+        
+        let pool = Pool::new(redis_config, None, None, None, 6)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create Redis pool: {}", e)))?;
+        
+        pool.connect();
+        pool.wait_for_connect()
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to connect to Redis: {}", e)))?;
+        
+        let session_store = RedisStore::new(pool);
         let session_layer = SessionManagerLayer::new(session_store)
+            .with_secure(false) // Set to true for HTTPS in production
             .with_expiry(Expiry::OnInactivity(tower_sessions::cookie::time::Duration::hours(1)));
 
 
@@ -167,12 +140,3 @@ async fn require_auth(
     }
 }
 
-// We need to define a wrapper type in order to retrieve the URL
-// in the `subscribe` handler.
-// Retrieval from the context, in actix-web, is type-based: using
-// a raw `String` would expose us to conflicts.
-#[derive(Clone)]
-pub struct ApplicationBaseUrl(pub String);
-
-#[derive(Clone)]
-pub struct HmacSecret(pub secrecy::Secret<String>);
