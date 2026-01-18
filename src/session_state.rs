@@ -45,10 +45,10 @@ impl TypedSessionAxum {
     }
 
     pub async fn log_out(&self) {
-        // Remove the user_id from the session
+        // Remove the user_id from the session (but keep the session itself alive for flash messages)
         let _: Result<Option<Uuid>, _> = self.0.remove(Self::USER_ID_KEY).await;
-        // Delete the session entirely
-        self.0.delete().await.ok();
+        // Cycle the session ID for security
+        let _ = self.0.cycle_id();
     }
 }
 

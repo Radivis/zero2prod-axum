@@ -1,7 +1,7 @@
 use axum::routing::{get, post};
 use axum::Router;
 use tower_sessions::SessionManagerLayer;
-use tower_sessions_redis_store::RedisStore;
+use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
@@ -71,18 +71,29 @@ impl Application {
             hmac_secret: HmacSecret(configuration.application.hmac_secret),
         };
 
-        // Set up session layer with MemoryStore
-        // TODO: Migrate to RedisStore/ValkeyStore for production
-        // Ready to use: tower-sessions 0.14 + tower-sessions-redis-store 0.16
-        // Both support Valkey via fred v10+ client which has native Valkey support
-        // Example setup:
-        //   use tower_sessions_redis_store::RedisStore;
-        //   use tower_sessions_redis_store::fred::prelude::*;
-        //   let pool = RedisPool::new(Config::from_url(redis_uri)?, None, None, None, 6)?;
-        //   pool.init().await?;
-        //   let redis_store = RedisStore::new(pool);
-        let session_store = tower_sessions::MemoryStore::default();
-        let session_layer = SessionManagerLayer::new(session_store);
+        // Set up session layer with RedisStore (compatible with Valkey)
+        // fred v10+ supports both Redis and Valkey
+        let redis_config = Config::from_url(configuration.redis_uri.expose_secret())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        
+        let pool = Pool::new(redis_config, None, None, None, 6)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        
+        let redis_conn = pool.connect();
+        pool.wait_for_connect()
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        
+        // Keep the connection alive (will be dropped when the pool is dropped)
+        tokio::spawn(async move {
+            let _ = redis_conn.await;
+        });
+        
+        let session_store = RedisStore::new(pool);
+        let session_layer = SessionManagerLayer::new(session_store)
+            .with_expiry(tower_sessions::Expiry::OnInactivity(
+                tower_sessions::cookie::time::Duration::hours(1)
+            ));
 
         let app = Router::new()
             .route("/health_check", get(health_check_axum))

@@ -22,13 +22,13 @@ pub async fn log_out_axum(session: Session) -> Redirect {
     match typed_session.get_user_id().await {
         Ok(None) => Redirect::to("/login"),
         Ok(Some(_)) => {
-            // Set flash message before deleting session
-            let flash_sender = FlashMessageSender::new(session.clone());
+            // Logout first (removes user_id, cycles session ID)
+            typed_session.log_out().await;
+            // Now set flash message in the new session
+            let flash_sender = FlashMessageSender::new(session);
             if let Err(e) = flash_sender.info("You have successfully logged out.").await {
                 tracing::error!("Failed to set flash message: {:?}", e);
             }
-            // Now delete the session
-            typed_session.log_out().await;
             Redirect::to("/login")
         }
         Err(_) => Redirect::to("/login"),
