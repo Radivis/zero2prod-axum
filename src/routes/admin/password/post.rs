@@ -1,9 +1,9 @@
-use axum::extract::{Form, State};
-use axum::response::{Redirect, IntoResponse};
-use tower_sessions::Session;
 use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
+use axum::extract::{Form, State};
+use axum::response::{IntoResponse, Redirect};
 use secrecy::{ExposeSecret, Secret};
+use tower_sessions::Session;
 
 use crate::authentication::{AuthError, Credentials, UserId, validate_credentials};
 use crate::routes::admin::dashboard::get_username;
@@ -60,7 +60,8 @@ pub async fn change_password(
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error",
-            ).into_response();
+            )
+                .into_response();
         }
     };
     let credentials = Credentials {
@@ -71,7 +72,10 @@ pub async fn change_password(
         let flash_sender = FlashMessageSender::new(session.clone());
         match e {
             AuthError::InvalidCredentials(_) => {
-                if let Err(err) = flash_sender.error("The current password is incorrect.").await {
+                if let Err(err) = flash_sender
+                    .error("The current password is incorrect.")
+                    .await
+                {
                     tracing::error!("Failed to set flash message: {:?}", err);
                 }
                 return Redirect::to("/admin/password").into_response();
@@ -85,7 +89,10 @@ pub async fn change_password(
             }
         }
     }
-    if let Err(_) = crate::authentication::change_password(*user_id, form.new_password, &state.db).await {
+    if crate::authentication::change_password(*user_id, form.new_password, &state.db)
+        .await
+        .is_err()
+    {
         return (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             "Internal server error",

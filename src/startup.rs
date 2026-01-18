@@ -1,25 +1,24 @@
-use axum::routing::{get, post};
 use axum::Router;
-use tower_sessions::SessionManagerLayer;
-use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
+use axum::routing::{get, post};
+use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use tower_http::trace::TraceLayer;
-use secrecy::{ExposeSecret, Secret};
+use tower_sessions::SessionManagerLayer;
+use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 
 use crate::authentication::UserId;
-use axum::extract::FromRequestParts;
 use crate::configuration::{DatabaseSettings, Settings};
+use crate::email_client::EmailClient;
+use crate::routes::{
+    admin_dashboard, change_password, change_password_form, confirm, health_check, home, log_out,
+    login, login_form, publish_newsletter, publish_newsletter_form, subscribe,
+};
+use axum::extract::FromRequestParts;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
-use crate::email_client::EmailClient;
-use crate::routes::{
-    admin_dashboard, change_password, change_password_form,
-    health_check, home, log_out, login, login_form,
-    publish_newsletter, publish_newsletter_form, subscribe, confirm,
-};
 use tower_sessions::Expiry;
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
@@ -68,10 +67,7 @@ impl Application {
         self.port
     }
 
-    pub async fn run_until_stopped(
-        self,
-        configuration: Settings,
-    ) -> Result<(), std::io::Error> {
+    pub async fn run_until_stopped(self, configuration: Settings) -> Result<(), std::io::Error> {
         let connection_pool = get_connection_pool(&configuration.database);
         let email_client = configuration.email_client.client();
         let app_state = AppState {
@@ -84,21 +80,22 @@ impl Application {
         // Set up RedisStore with fred (compatible with both Redis and Valkey)
         let redis_url = configuration.redis_uri.expose_secret();
         let redis_config = Config::from_url(redis_url.as_str())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Invalid Redis URL: {}", e)))?;
-        
+            .map_err(|e| std::io::Error::other(format!("Invalid Redis URL: {}", e)))?;
+
         let pool = Pool::new(redis_config, None, None, None, 6)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create Redis pool: {}", e)))?;
-        
+            .map_err(|e| std::io::Error::other(format!("Failed to create Redis pool: {}", e)))?;
+
         pool.connect();
         pool.wait_for_connect()
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to connect to Redis: {}", e)))?;
-        
+            .map_err(|e| std::io::Error::other(format!("Failed to connect to Redis: {}", e)))?;
+
         let session_store = RedisStore::new(pool);
         let session_layer = SessionManagerLayer::new(session_store)
             .with_secure(false) // Set to true for HTTPS in production
-            .with_expiry(Expiry::OnInactivity(tower_sessions::cookie::time::Duration::hours(1)));
-
+            .with_expiry(Expiry::OnInactivity(
+                tower_sessions::cookie::time::Duration::hours(1),
+            ));
 
         let app = Router::new()
             .route("/health_check", get(health_check))
@@ -110,7 +107,10 @@ impl Application {
                 "/admin",
                 Router::new()
                     .route("/dashboard", get(admin_dashboard))
-                    .route("/newsletters", get(publish_newsletter_form).post(publish_newsletter))
+                    .route(
+                        "/newsletters",
+                        get(publish_newsletter_form).post(publish_newsletter),
+                    )
                     .route("/password", get(change_password_form).post(change_password))
                     .route("/logout", post(log_out))
                     .route_layer(axum::middleware::from_fn(require_auth)),
@@ -125,10 +125,7 @@ impl Application {
     }
 }
 
-async fn require_auth(
-    req: Request,
-    next: Next,
-) -> axum::response::Response {
+async fn require_auth(req: Request, next: Next) -> axum::response::Response {
     let (mut parts, body) = req.into_parts();
     match UserId::from_request_parts(&mut parts, &()).await {
         Ok(user_id) => {
@@ -139,4 +136,3 @@ async fn require_auth(
         Err(redirect) => redirect.into_response(),
     }
 }
-
