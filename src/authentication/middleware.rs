@@ -52,7 +52,6 @@ pub async fn reject_anonymous_users(
 }
 
 // Axum version
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for UserId
 where
     S: Send + Sync,

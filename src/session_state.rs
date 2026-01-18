@@ -70,7 +70,6 @@ impl FromRequest for TypedSession {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for TypedSessionAxum
 where
     S: Send + Sync,

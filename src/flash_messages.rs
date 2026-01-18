@@ -27,7 +27,6 @@ impl FlashMessages {
 
 pub struct IncomingFlashMessages(pub FlashMessages);
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for IncomingFlashMessages
 where
     S: Send + Sync,

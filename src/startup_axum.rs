@@ -1,10 +1,12 @@
 use axum::routing::{get, post};
 use axum::Router;
 use tower_sessions::SessionManagerLayer;
+use tower_sessions_redis_store::RedisStore;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use tower_http::trace::TraceLayer;
+use secrecy::ExposeSecret;
 
 use crate::authentication::UserId;
 use axum::extract::FromRequestParts;
@@ -69,9 +71,17 @@ impl Application {
             hmac_secret: HmacSecret(configuration.application.hmac_secret),
         };
 
-        // Set up session layer with MemoryStore (temporary - will switch to Redis later)
-        use tower_sessions::MemoryStore;
-        let session_store = MemoryStore::default();
+        // Set up session layer with MemoryStore
+        // TODO: Migrate to RedisStore/ValkeyStore for production
+        // Ready to use: tower-sessions 0.14 + tower-sessions-redis-store 0.16
+        // Both support Valkey via fred v10+ client which has native Valkey support
+        // Example setup:
+        //   use tower_sessions_redis_store::RedisStore;
+        //   use tower_sessions_redis_store::fred::prelude::*;
+        //   let pool = RedisPool::new(Config::from_url(redis_uri)?, None, None, None, 6)?;
+        //   pool.init().await?;
+        //   let redis_store = RedisStore::new(pool);
+        let session_store = tower_sessions::MemoryStore::default();
         let session_layer = SessionManagerLayer::new(session_store);
 
         let app = Router::new()
