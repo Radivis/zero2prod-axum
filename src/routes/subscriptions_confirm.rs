@@ -1,4 +1,8 @@
 use actix_web::{HttpResponse, web};
+use axum::extract::{Query, State};
+use axum::http::StatusCode as AxumStatusCode;
+use axum::response::IntoResponse;
+use crate::startup_axum::AppState;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -78,4 +82,35 @@ pub async fn get_subscriber_id_from_token(
         e
     })?;
     Ok(result.map(|r| r.subscriber_id))
+}
+
+// Axum version
+#[tracing::instrument(
+    name = "Confirm a pending subscriber",
+    skip(parameters, state)
+)]
+pub async fn confirm_axum(
+    State(state): State<AppState>,
+    Query(parameters): Query<Parameters>,
+) -> impl IntoResponse {
+    let subscriber_id =
+        match get_subscriber_id_from_token(&state.db, &parameters.subscription_token)
+            .await
+        {
+            Ok(subscriber_id) => subscriber_id,
+            Err(_) => return AxumStatusCode::INTERNAL_SERVER_ERROR,
+        };
+    match subscriber_id {
+        // Non-existing token!
+        None => AxumStatusCode::UNAUTHORIZED,
+        Some(subscriber_id_) => {
+            if confirm_subscriber(&state.db, subscriber_id_)
+                .await
+                .is_err()
+            {
+                return AxumStatusCode::INTERNAL_SERVER_ERROR;
+            }
+            AxumStatusCode::OK
+        }
+    }
 }

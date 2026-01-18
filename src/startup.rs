@@ -47,6 +47,7 @@ pub struct HmacSecret(pub Secret<String>);
 // in the `subscribe` handler.
 // Retrieval from the context, in actix-web, is type-based: using
 // a raw `String` would expose us to conflicts.
+#[derive(Clone)]
 pub struct ApplicationBaseUrl(pub String);
 
 impl Application {

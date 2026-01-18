@@ -1,10 +1,14 @@
 use crate::domain::{NewSubscriber, SubscriberEmailAddress, SubscriberName};
 use crate::email_client::{EmailClient, EmailData};
 use crate::startup::ApplicationBaseUrl;
+use crate::startup_axum::AppState;
 use crate::telemetry::error_chain_fmt;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError, web};
 use anyhow::Context;
+use axum::extract::{Form, State};
+use axum::http::StatusCode as AxumStatusCode;
+use axum::response::IntoResponse;
 use chrono::Utc;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -85,6 +89,17 @@ impl ResponseError for SubscribeError {
     }
 }
 
+// Axum version
+impl axum::response::IntoResponse for SubscribeError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            SubscribeError::ValidationError(_) => axum::http::StatusCode::BAD_REQUEST,
+            SubscribeError::UnexpectedError(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, self.to_string()).into_response()
+    }
+}
+
 pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
     let name = SubscriberName::parse(form.name)?;
     let email = SubscriberEmailAddress::parse(form.email)?;
@@ -135,6 +150,48 @@ pub async fn subscribe(
     .await
     .context("Failed to send a confirmation email.")?;
     Ok(HttpResponse::Ok().finish())
+}
+
+// Axum version
+#[tracing::instrument(
+    name = "Adding a new subscriber",
+    skip(form, state),
+    fields(
+        subscriber_email = %form.email,
+        subscriber_name = %form.name
+    )
+)]
+pub async fn subscribe_axum(
+    State(state): State<AppState>,
+    Form(form): Form<FormData>,
+) -> Result<impl IntoResponse, SubscribeError> {
+    let new_subscriber = form.try_into().map_err(SubscribeError::ValidationError)?;
+    let mut transaction = state
+        .db
+        .begin()
+        .await
+        .context("Failed to acquire a Postgres connection from the pool")?;
+    let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
+        .await
+        .context("Failed to insert new subscriber in the database.")?;
+    let subscription_token = Uuid::new_v4().simple().to_string();
+    store_token(&mut transaction, subscriber_id, &subscription_token)
+        .await
+        .context("Failed to store the confirmation token for a new subscriber.")?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit SQL transaction to store a new subscriber.")?;
+
+    send_confirmation_email(
+        &state.email_client,
+        new_subscriber,
+        &state.base_url.0,
+        &subscription_token,
+    )
+    .await
+    .context("Failed to send a confirmation email.")?;
+    Ok(AxumStatusCode::OK)
 }
 
 #[tracing::instrument(

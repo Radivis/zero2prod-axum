@@ -1,5 +1,6 @@
 use actix_web::HttpResponse;
 use actix_web::http::header::LOCATION;
+use axum::http::StatusCode as AxumStatusCode;
 
 // Return a 400 with the user-representation of the validation error as body.
 // The error root cause is preserved for logging purposes.
@@ -22,4 +23,21 @@ pub fn see_other(location: &str) -> HttpResponse {
     HttpResponse::SeeOther()
         .insert_header((LOCATION, location))
         .finish()
+}
+
+// Axum versions
+pub fn e400_axum<T>(e: T) -> AxumStatusCode
+where
+    T: std::fmt::Debug + std::fmt::Display + 'static,
+{
+    tracing::error!("Bad request: {}", e);
+    AxumStatusCode::BAD_REQUEST
+}
+
+pub fn e500_axum<T>(e: T) -> AxumStatusCode
+where
+    T: std::fmt::Debug + std::fmt::Display + 'static,
+{
+    tracing::error!("Internal server error: {}", e);
+    AxumStatusCode::INTERNAL_SERVER_ERROR
 }

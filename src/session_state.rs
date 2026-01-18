@@ -1,9 +1,16 @@
 use actix_session::{Session, SessionExt, SessionGetError, SessionInsertError};
 use actix_web::dev::Payload;
 use actix_web::{FromRequest, HttpRequest};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use std::future::{Ready, ready};
 use uuid::Uuid;
+
 pub struct TypedSession(Session);
+
+// Axum version
+pub struct TypedSessionAxum(pub tower_sessions::Session);
+
 impl TypedSession {
     const USER_ID_KEY: &'static str = "user_id";
     pub fn renew(&self) {
@@ -22,6 +29,29 @@ impl TypedSession {
     }
 }
 
+impl TypedSessionAxum {
+    const USER_ID_KEY: &'static str = "user_id";
+    
+    pub async fn renew(&self) {
+        let _ = self.0.cycle_id();
+    }
+    
+    pub async fn insert_user_id(&self, user_id: Uuid) -> Result<(), tower_sessions::session::Error> {
+        self.0.insert(Self::USER_ID_KEY, user_id).await
+    }
+
+    pub async fn get_user_id(&self) -> Result<Option<Uuid>, tower_sessions::session::Error> {
+        self.0.get(Self::USER_ID_KEY).await
+    }
+
+    pub async fn log_out(&self) {
+        // Remove the user_id from the session
+        let _: Result<Option<Uuid>, _> = self.0.remove(Self::USER_ID_KEY).await;
+        // Delete the session entirely
+        self.0.delete().await.ok();
+    }
+}
+
 impl FromRequest for TypedSession {
     // This is a complicated way of saying
     // "We return the same error returned by the
@@ -37,5 +67,21 @@ impl FromRequest for TypedSession {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         ready(Ok(TypedSession(req.get_session())))
+    }
+}
+
+#[axum::async_trait]
+impl<S> FromRequestParts<S> for TypedSessionAxum
+where
+    S: Send + Sync,
+{
+    type Rejection = axum::http::StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let session = parts.extensions
+            .get::<tower_sessions::Session>()
+            .ok_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+            .clone();
+        Ok(TypedSessionAxum(session))
     }
 }
