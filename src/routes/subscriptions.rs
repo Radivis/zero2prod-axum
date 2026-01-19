@@ -3,7 +3,7 @@ use crate::email_client::{EmailClient, EmailData};
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
-use axum::extract::{Form, State};
+use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use chrono::Utc;
@@ -103,7 +103,7 @@ pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
 )]
 pub async fn subscribe(
     State(state): State<AppState>,
-    Form(form): Form<FormData>,
+    Json(form): Json<FormData>,
 ) -> Result<impl IntoResponse, SubscribeError> {
     let new_subscriber = form.try_into().map_err(SubscribeError::ValidationError)?;
     let mut transaction = state

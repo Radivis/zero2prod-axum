@@ -2,7 +2,7 @@ use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
-use axum::extract::{Form, State};
+use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect};
 use secrecy::{ExposeSecret, Secret};
@@ -59,7 +59,7 @@ pub async fn change_password(
     user_id: UserId,
     session: Session,
     State(state): State<AppState>,
-    Form(form): Form<ChangePasswordFormData>,
+    Json(form): Json<ChangePasswordFormData>,
 ) -> Result<impl IntoResponse, ChangePasswordError> {
     // Validate password match
     if form.new_password.expose_secret() != form.new_password_check.expose_secret() {

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Container } from '@mui/material'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import InitialPassword from './pages/InitialPassword'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminNewsletter from './pages/AdminNewsletter'
 import AdminPassword from './pages/AdminPassword'
@@ -15,6 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/initial_password" element={<InitialPassword />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/newsletters" element={<AdminNewsletter />} />
             <Route path="/admin/password" element={<AdminPassword />} />

@@ -12,8 +12,9 @@ use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::{
-    admin_dashboard, change_password, change_password_form, confirm, health_check, home, log_out,
-    login, login_form, publish_newsletter, publish_newsletter_form, subscribe,
+    admin_dashboard, change_password, change_password_form, check_users_exist_endpoint, confirm,
+    create_initial_password, health_check, home, initial_password_form, log_out, login, login_form,
+    publish_newsletter, publish_newsletter_form, subscribe,
 };
 use axum::extract::FromRequestParts;
 use axum::extract::Request;
@@ -99,8 +100,13 @@ impl Application {
 
         let app = Router::new()
             .route("/health_check", get(health_check))
+            .route("/api/users/exists", get(check_users_exist_endpoint))
             .route("/", get(home))
             .route("/login", get(login_form).post(login))
+            .route(
+                "/initial_password",
+                get(initial_password_form).post(create_initial_password),
+            )
             .route("/subscriptions", post(subscribe))
             .route("/subscriptions/confirm", get(confirm))
             .nest(

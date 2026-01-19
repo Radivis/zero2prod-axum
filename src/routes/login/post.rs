@@ -1,7 +1,7 @@
 use crate::flash_messages::FlashMessageSender;
 use crate::session_state::TypedSession;
 use crate::startup::AppState;
-use axum::extract::{Form, State};
+use axum::extract::{Json, State};
 use axum::response::Redirect;
 use secrecy::Secret;
 use tower_sessions::Session;
@@ -21,7 +21,7 @@ pub struct FormData {
 pub async fn login(
     session: Session,
     State(state): State<AppState>,
-    Form(form): Form<FormData>,
+    Json(form): Json<FormData>,
 ) -> impl axum::response::IntoResponse {
     let typed_session = TypedSession(session.clone());
     let credentials = Credentials {

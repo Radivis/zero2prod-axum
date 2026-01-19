@@ -13,13 +13,16 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   
+  // Build headers properly - ensure Content-Type is set for requests with body
+  const headers = new Headers(options.headers || {});
+  if (options.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  
   const response = await fetch(url, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {

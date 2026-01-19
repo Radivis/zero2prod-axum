@@ -1,7 +1,7 @@
 use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
 use anyhow::Context;
-use axum::extract::{Form, State};
+use axum::extract::{Json, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use tower_sessions::Session;
@@ -123,7 +123,7 @@ pub async fn publish_newsletter(
     user_id: UserId,
     session: Session,
     State(state): State<AppState>,
-    Form(form): Form<SendNewsletterFormData>,
+    Json(form): Json<SendNewsletterFormData>,
 ) -> Result<impl IntoResponse, PublishError> {
     let SendNewsletterFormData {
         title,
