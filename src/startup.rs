@@ -17,9 +17,16 @@ use crate::routes::{
 };
 use axum::extract::FromRequestParts;
 use axum::extract::Request;
+use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Json};
 use tower_sessions::Expiry;
+
+#[derive(serde::Serialize)]
+struct AuthErrorResponse {
+    success: bool,
+    error: String,
+}
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
     PgPoolOptions::new().connect_lazy_with(db_configuration.connect_options())
@@ -124,12 +131,23 @@ impl Application {
 
 async fn require_auth(req: Request, next: Next) -> axum::response::Response {
     let (mut parts, body) = req.into_parts();
+    // All /admin/* routes are API-only, so always return JSON for auth failures
     match UserId::from_request_parts(&mut parts, &()).await {
         Ok(user_id) => {
             parts.extensions.insert(user_id);
             let req = Request::from_parts(parts, body);
             next.run(req).await
         }
-        Err(redirect) => redirect.into_response(),
+        Err(_redirect) => {
+            // Return JSON error for API requests (all /admin routes are API-only)
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthErrorResponse {
+                    success: false,
+                    error: "Authentication required".to_string(),
+                }),
+            )
+                .into_response()
+        }
     }
 }
