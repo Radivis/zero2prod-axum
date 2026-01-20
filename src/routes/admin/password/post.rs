@@ -1,12 +1,10 @@
-use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
 use axum::extract::{Json, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect};
+use axum::response::IntoResponse;
 use secrecy::{ExposeSecret, Secret};
-use tower_sessions::Session;
 
 use crate::authentication::{AuthError, Credentials, UserId, validate_credentials};
 use crate::routes::admin::utils::get_username;
@@ -38,62 +36,64 @@ impl std::fmt::Debug for ChangePasswordError {
     }
 }
 
+#[derive(serde::Serialize)]
+pub struct ChangePasswordResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
 impl IntoResponse for ChangePasswordError {
     fn into_response(self) -> axum::response::Response {
-        match self {
-            ChangePasswordError::PasswordMismatch
-            | ChangePasswordError::PasswordTooShort
-            | ChangePasswordError::PasswordTooLong
-            | ChangePasswordError::InvalidCurrentPassword => {
-                // Flash message already set in handler, just redirect
-                Redirect::to("/admin/password").into_response()
-            }
+        let (status, error_msg) = match self {
+            ChangePasswordError::PasswordMismatch => (
+                StatusCode::BAD_REQUEST,
+                "You entered two different new passwords - the field values must match.",
+            ),
+            ChangePasswordError::PasswordTooShort => (
+                StatusCode::BAD_REQUEST,
+                "The new password must have at least 12 characters besides spaces.",
+            ),
+            ChangePasswordError::PasswordTooLong => (
+                StatusCode::BAD_REQUEST,
+                "The new password must not have more than 128 characters.",
+            ),
+            ChangePasswordError::InvalidCurrentPassword => (
+                StatusCode::UNAUTHORIZED,
+                "The current password is incorrect.",
+            ),
             ChangePasswordError::UnexpectedError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+                (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong")
             }
-        }
+        };
+        (
+            status,
+            Json(ChangePasswordResponse {
+                success: false,
+                error: Some(error_msg.to_string()),
+            }),
+        )
+            .into_response()
     }
 }
 
 pub async fn change_password(
     user_id: UserId,
-    session: Session,
     State(state): State<AppState>,
     Json(form): Json<ChangePasswordFormData>,
 ) -> Result<impl IntoResponse, ChangePasswordError> {
     // Validate password match
     if form.new_password.expose_secret() != form.new_password_check.expose_secret() {
-        let flash_sender = FlashMessageSender::new(session.clone());
-        if let Err(e) = flash_sender
-            .error("You entered two different new passwords - the field values must match.")
-            .await
-        {
-            tracing::error!("Failed to set flash message: {:?}", e);
-        }
         return Err(ChangePasswordError::PasswordMismatch);
     }
 
     // Validate password length (excluding spaces)
     if form.new_password.expose_secret().replace(" ", "").len() < 12 {
-        let flash_sender = FlashMessageSender::new(session.clone());
-        if let Err(e) = flash_sender
-            .error("The new password must have at least 12 characters besides spaces.")
-            .await
-        {
-            tracing::error!("Failed to set flash message: {:?}", e);
-        }
         return Err(ChangePasswordError::PasswordTooShort);
     }
 
     // Validate maximum password length
     if form.new_password.expose_secret().len() > 128 {
-        let flash_sender = FlashMessageSender::new(session.clone());
-        if let Err(e) = flash_sender
-            .error("The new password must not have more than 128 characters.")
-            .await
-        {
-            tracing::error!("Failed to set flash message: {:?}", e);
-        }
         return Err(ChangePasswordError::PasswordTooLong);
     }
 
@@ -111,13 +111,6 @@ pub async fn change_password(
     if let Err(e) = validate_credentials(credentials, &state.db).await {
         match e {
             AuthError::InvalidCredentials(_) => {
-                let flash_sender = FlashMessageSender::new(session.clone());
-                if let Err(err) = flash_sender
-                    .error("The current password is incorrect.")
-                    .await
-                {
-                    tracing::error!("Failed to set flash message: {:?}", err);
-                }
                 return Err(ChangePasswordError::InvalidCurrentPassword);
             }
             AuthError::UnexpectedError(err) => {
@@ -131,11 +124,11 @@ pub async fn change_password(
         .await
         .context("Failed to change password")?;
 
-    // Set success flash message
-    let flash_sender = FlashMessageSender::new(session);
-    if let Err(e) = flash_sender.info("Your password has been changed.").await {
-        tracing::error!("Failed to set flash message: {:?}", e);
-    }
-
-    Ok(Redirect::to("/admin/password"))
+    Ok((
+        StatusCode::OK,
+        Json(ChangePasswordResponse {
+            success: true,
+            error: None,
+        }),
+    ))
 }
