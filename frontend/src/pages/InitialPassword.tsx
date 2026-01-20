@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
 import {
   Paper,
   TextField,
@@ -14,43 +15,42 @@ import { apiRequest } from '../api/client'
 function InitialPassword() {
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const navigate = useNavigate()
 
-  const handleSubmit = async (e: FormEvent) => {
+  const initialPasswordMutation = useMutation({
+    mutationFn: async (data: { password: string; password_confirmation: string }) => {
+      return apiRequest('/initial_password', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
+    onSuccess: () => {
+      navigate('/login')
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setValidationError(null)
 
     // Client-side validation
     if (password !== passwordConfirmation) {
-      setError('Passwords do not match')
+      setValidationError('Passwords do not match')
       return
     }
 
     if (password.replace(/\s/g, '').length < 12) {
-      setError('Password must have at least 12 characters (excluding spaces)')
+      setValidationError('Password must have at least 12 characters (excluding spaces)')
       return
     }
 
     if (password.length > 128) {
-      setError('Password must not exceed 128 characters')
+      setValidationError('Password must not exceed 128 characters')
       return
     }
 
-    setLoading(true)
-
-    try {
-      await apiRequest('/initial_password', {
-        method: 'POST',
-        body: JSON.stringify({ password, password_confirmation: passwordConfirmation }),
-      })
-      navigate('/login')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create admin user')
-    } finally {
-      setLoading(false)
-    }
+    initialPasswordMutation.mutate({ password, password_confirmation: passwordConfirmation })
   }
 
   return (
@@ -62,9 +62,12 @@ function InitialPassword() {
         <Typography variant="h5" component="h1" gutterBottom>
           Set Initial Admin Password
         </Typography>
-        {error && (
+        {(validationError || initialPasswordMutation.isError) && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+            {validationError ||
+              (initialPasswordMutation.error instanceof Error
+                ? initialPasswordMutation.error.message
+                : 'Failed to create admin user')}
           </Alert>
         )}
         <form onSubmit={handleSubmit}>
@@ -95,9 +98,9 @@ function InitialPassword() {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={loading}
+            disabled={initialPasswordMutation.isPending}
           >
-            {loading ? <CircularProgress size={24} /> : 'Create Admin User'}
+            {initialPasswordMutation.isPending ? <CircularProgress size={24} /> : 'Create Admin User'}
           </Button>
         </form>
       </Paper>

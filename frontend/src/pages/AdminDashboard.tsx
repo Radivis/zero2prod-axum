@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import {
   Paper,
   Typography,
@@ -14,64 +14,55 @@ import {
 import { apiRequest } from '../api/client'
 
 function AdminDashboard() {
-  const [username, setUsername] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        // For now, we'll need to parse the HTML response or create a JSON endpoint
-        // Since the backend still returns HTML, we'll handle 401 redirects
-        const response = await fetch('/admin/dashboard', {
-          credentials: 'include',
-        })
-        
-        if (response.status === 401 || response.status === 403) {
-          navigate('/login')
-          return
-        }
+  const dashboardQuery = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: async () => {
+      // For now, we'll need to parse the HTML response or create a JSON endpoint
+      // Since the backend still returns HTML, we'll handle 401 redirects
+      const response = await fetch('/admin/dashboard', {
+        credentials: 'include',
+      })
 
-        if (!response.ok) {
-          throw new Error('Failed to load dashboard')
-        }
-
-        // Parse HTML to extract username (temporary until backend returns JSON)
-        const html = await response.text()
-        const match = html.match(/Welcome\s+([^!]+)!/)
-        if (match) {
-          setUsername(match[1].trim())
-        } else {
-          setUsername('Admin')
-        }
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('401')) {
-          navigate('/login')
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to load dashboard')
-        }
-      } finally {
-        setLoading(false)
+      if (response.status === 401 || response.status === 403) {
+        navigate('/login')
+        throw new Error('Unauthorized')
       }
-    }
 
-    fetchDashboard()
-  }, [navigate])
+      if (!response.ok) {
+        throw new Error('Failed to load dashboard')
+      }
 
-  const handleLogout = async () => {
-    try {
-      await apiRequest('/admin/logout', {
+      // Parse HTML to extract username (temporary until backend returns JSON)
+      const html = await response.text()
+      const match = html.match(/Welcome\s+([^!]+)!/)
+      const username = match ? match[1].trim() : 'Admin'
+      return { username }
+    },
+    retry: false,
+  })
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('/admin/logout', {
         method: 'POST',
       })
+    },
+    onSuccess: () => {
       navigate('/login')
-    } catch (err) {
+    },
+    onError: () => {
       // Even if logout fails, redirect to login
       navigate('/login')
-    }
+    },
+  })
+
+  const handleLogout = () => {
+    logoutMutation.mutate()
   }
 
-  if (loading) {
+  if (dashboardQuery.isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <CircularProgress />
@@ -79,10 +70,14 @@ function AdminDashboard() {
     )
   }
 
-  if (error) {
+  if (dashboardQuery.isError) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <Alert severity="error">{error}</Alert>
+        <Alert severity="error">
+          {dashboardQuery.error instanceof Error
+            ? dashboardQuery.error.message
+            : 'Failed to load dashboard'}
+        </Alert>
       </Box>
     )
   }
@@ -91,7 +86,7 @@ function AdminDashboard() {
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
       <Paper sx={{ p: 4, maxWidth: 600, width: '100%' }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Welcome {username}!
+          Welcome {dashboardQuery.data?.username}!
         </Typography>
         <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
           Available actions:
@@ -112,9 +107,10 @@ function AdminDashboard() {
               variant="contained"
               color="primary"
               onClick={handleLogout}
+              disabled={logoutMutation.isPending}
               sx={{ mt: 2 }}
             >
-              Logout
+              {logoutMutation.isPending ? <CircularProgress size={24} /> : 'Logout'}
             </Button>
           </ListItem>
         </List>

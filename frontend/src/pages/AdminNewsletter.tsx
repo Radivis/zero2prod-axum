@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
 import {
   Paper,
   TextField,
@@ -16,36 +17,35 @@ function AdminNewsletter() {
   const [htmlContent, setHtmlContent] = useState('')
   const [textContent, setTextContent] = useState('')
   const [idempotencyKey] = useState(() => crypto.randomUUID())
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(false)
-    setLoading(true)
-
-    try {
-      await apiRequest('/admin/newsletters', {
+  const newsletterMutation = useMutation({
+    mutationFn: async (data: {
+      title: string
+      html_content: string
+      text_content: string
+      idempotency_key: string
+    }) => {
+      return apiRequest('/admin/newsletters', {
         method: 'POST',
-        body: JSON.stringify({
-          title,
-          html_content: htmlContent,
-          text_content: textContent,
-          idempotency_key: idempotencyKey,
-        }),
+        body: JSON.stringify(data),
       })
-      setSuccess(true)
+    },
+    onSuccess: () => {
       // Reset form after successful submission
       setTitle('')
       setHtmlContent('')
       setTextContent('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to publish newsletter')
-    } finally {
-      setLoading(false)
-    }
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    newsletterMutation.mutate({
+      title,
+      html_content: htmlContent,
+      text_content: textContent,
+      idempotency_key: idempotencyKey,
+    })
   }
 
   return (
@@ -54,12 +54,14 @@ function AdminNewsletter() {
         <Typography variant="h5" component="h1" gutterBottom>
           Send a newsletter
         </Typography>
-        {error && (
+        {newsletterMutation.isError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+            {newsletterMutation.error instanceof Error
+              ? newsletterMutation.error.message
+              : 'Failed to publish newsletter'}
           </Alert>
         )}
-        {success && (
+        {newsletterMutation.isSuccess && (
           <Alert severity="success" sx={{ mb: 2 }}>
             The newsletter issue has been accepted - emails will go out shortly.
           </Alert>
@@ -100,9 +102,9 @@ function AdminNewsletter() {
             <Button
               type="submit"
               variant="contained"
-              disabled={loading}
+              disabled={newsletterMutation.isPending}
             >
-              {loading ? <CircularProgress size={24} /> : 'Send newsletter'}
+              {newsletterMutation.isPending ? <CircularProgress size={24} /> : 'Send newsletter'}
             </Button>
             <Button
               component={Link}

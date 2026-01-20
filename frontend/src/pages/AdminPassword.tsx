@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
 import {
   Paper,
   TextField,
@@ -15,53 +16,53 @@ function AdminPassword() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordCheck, setNewPasswordCheck] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: FormEvent) => {
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data: {
+      current_password: string
+      new_password: string
+      new_password_check: string
+    }) => {
+      return apiRequest('/admin/password', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
+    onSuccess: () => {
+      // Reset form after successful submission
+      setCurrentPassword('')
+      setNewPassword('')
+      setNewPasswordCheck('')
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
-    setSuccess(false)
+    setValidationError(null)
 
     // Client-side validation
     if (newPassword !== newPasswordCheck) {
-      setError('You entered two different new passwords - the field values must match.')
+      setValidationError('You entered two different new passwords - the field values must match.')
       return
     }
 
     const passwordWithoutSpaces = newPassword.replace(/\s/g, '')
     if (passwordWithoutSpaces.length < 12) {
-      setError('The new password must have at least 12 characters besides spaces.')
+      setValidationError('The new password must have at least 12 characters besides spaces.')
       return
     }
 
     if (newPassword.length > 128) {
-      setError('The new password must not have more than 128 characters.')
+      setValidationError('The new password must not have more than 128 characters.')
       return
     }
 
-    setLoading(true)
-
-    try {
-      await apiRequest('/admin/password', {
-        method: 'POST',
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-          new_password_check: newPasswordCheck,
-        }),
-      })
-      setSuccess(true)
-      // Reset form after successful submission
-      setCurrentPassword('')
-      setNewPassword('')
-      setNewPasswordCheck('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password')
-    } finally {
-      setLoading(false)
-    }
+    changePasswordMutation.mutate({
+      current_password: currentPassword,
+      new_password: newPassword,
+      new_password_check: newPasswordCheck,
+    })
   }
 
   return (
@@ -70,12 +71,15 @@ function AdminPassword() {
         <Typography variant="h5" component="h1" gutterBottom>
           Change Password
         </Typography>
-        {error && (
+        {(validationError || changePasswordMutation.isError) && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+            {validationError ||
+              (changePasswordMutation.error instanceof Error
+                ? changePasswordMutation.error.message
+                : 'Failed to change password')}
           </Alert>
         )}
-        {success && (
+        {changePasswordMutation.isSuccess && (
           <Alert severity="success" sx={{ mb: 2 }}>
             Your password has been changed.
           </Alert>
@@ -118,9 +122,9 @@ function AdminPassword() {
             <Button
               type="submit"
               variant="contained"
-              disabled={loading}
+              disabled={changePasswordMutation.isPending}
             >
-              {loading ? <CircularProgress size={24} /> : 'Change password'}
+              {changePasswordMutation.isPending ? <CircularProgress size={24} /> : 'Change password'}
             </Button>
             <Button
               component={Link}
