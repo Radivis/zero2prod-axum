@@ -8,16 +8,17 @@ export default defineConfig({
     port: 3000,
     proxy: {
       // Proxy API endpoints and POST requests to backend
+      // Use 127.0.0.1 instead of localhost to force IPv4
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/health_check': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/login': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         // Only proxy POST requests, let Vite serve GET (React app)
         bypass(req) {
@@ -27,7 +28,7 @@ export default defineConfig({
         },
       },
       '/initial_password': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         bypass(req) {
           if (req.method === 'GET') {
@@ -36,11 +37,11 @@ export default defineConfig({
         },
       },
       '/subscriptions': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/admin': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         // Only proxy POST requests, let Vite serve GET (React app)
         bypass(req) {
