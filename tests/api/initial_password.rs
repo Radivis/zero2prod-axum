@@ -169,7 +169,7 @@ async fn check_users_exist_endpoint_returns_false_when_no_users() {
     // Assert
     assert_eq!(response.status().as_u16(), 200);
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["users_exist"].as_bool().unwrap(), false);
+    assert!(!body["users_exist"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -183,7 +183,7 @@ async fn check_users_exist_endpoint_returns_true_when_users_exist() {
     // Assert
     assert_eq!(response.status().as_u16(), 200);
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["users_exist"].as_bool().unwrap(), true);
+    assert!(body["users_exist"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -220,7 +220,7 @@ async fn can_login_after_creating_initial_admin() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(login_body["success"].as_bool().unwrap(), true);
+    assert!(login_body["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
