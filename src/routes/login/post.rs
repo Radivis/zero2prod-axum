@@ -1,8 +1,8 @@
-use crate::flash_messages::FlashMessageSender;
 use crate::session_state::TypedSession;
 use crate::startup::AppState;
 use axum::extract::{Json, State};
-use axum::response::Redirect;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use secrecy::Secret;
 use tower_sessions::Session;
 
@@ -12,6 +12,13 @@ use crate::authentication::{AuthError, Credentials, validate_credentials};
 pub struct FormData {
     username: String,
     password: Secret<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct LoginResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
 #[tracing::instrument(
@@ -36,20 +43,37 @@ pub async fn login(
             typed_session.renew().await;
             if let Err(e) = typed_session.insert_user_id(user_id).await {
                 tracing::error!("Failed to insert user_id into session: {:?}", e);
-                return Redirect::to("/login");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(LoginResponse {
+                        success: false,
+                        error: Some("Something went wrong".to_string()),
+                    }),
+                )
+                    .into_response();
             }
-            Redirect::to("/admin/dashboard")
+            (
+                StatusCode::OK,
+                Json(LoginResponse {
+                    success: true,
+                    error: None,
+                }),
+            )
+                .into_response()
         }
         Err(e) => {
-            let flash_sender = FlashMessageSender::new(session);
             let error_msg = match e {
-                AuthError::InvalidCredentials(_) => "Authentication failed".to_string(),
-                AuthError::UnexpectedError(_) => "Something went wrong".to_string(),
+                AuthError::InvalidCredentials(_) => "Authentication failed",
+                AuthError::UnexpectedError(_) => "Something went wrong",
             };
-            if let Err(err) = flash_sender.error(error_msg).await {
-                tracing::error!("Failed to set flash message: {:?}", err);
-            }
-            Redirect::to("/login")
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(LoginResponse {
+                    success: false,
+                    error: Some(error_msg.to_string()),
+                }),
+            )
+                .into_response()
         }
     }
 }

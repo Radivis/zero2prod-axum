@@ -7,52 +7,46 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // Proxy API endpoints and POST requests to backend
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Ensure Content-Type header is forwarded
-            if (req.headers['content-type']) {
-              proxyReq.setHeader('Content-Type', req.headers['content-type']);
-            }
-          });
-        },
+      },
+      '/health_check': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
       '/login': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Ensure Content-Type header is forwarded
-            if (req.headers['content-type']) {
-              proxyReq.setHeader('Content-Type', req.headers['content-type']);
-            }
-          });
+        // Only proxy POST requests, let Vite serve GET (React app)
+        bypass(req) {
+          if (req.method === 'GET') {
+            return '/index.html';
+          }
+        },
+      },
+      '/initial_password': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.method === 'GET') {
+            return '/index.html';
+          }
         },
       },
       '/subscriptions': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Ensure Content-Type header is forwarded
-            if (req.headers['content-type']) {
-              proxyReq.setHeader('Content-Type', req.headers['content-type']);
-            }
-          });
-        },
       },
       '/admin': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Ensure Content-Type header is forwarded
-            if (req.headers['content-type']) {
-              proxyReq.setHeader('Content-Type', req.headers['content-type']);
-            }
-          });
+        // Only proxy POST requests, let Vite serve GET (React app)
+        bypass(req) {
+          if (req.method === 'GET') {
+            return '/index.html';
+          }
         },
       },
     },
