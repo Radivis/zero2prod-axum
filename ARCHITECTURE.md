@@ -5,9 +5,9 @@
 The application is split into two services during development:
 
 ### Backend (Port 8000)
-- **Purpose**: API endpoints and HTML pages (for direct backend access)
+- **Purpose**: Pure JSON API server (no HTML served)
 - **Technology**: Rust + Axum
-- **API Routes** (JSON):
+- **API Routes**:
   - `POST /login` - User login
   - `POST /initial_password` - Set initial admin password
   - `POST /subscriptions` - Subscribe to newsletter
@@ -18,14 +18,7 @@ The application is split into two services during development:
   - `GET /health_check` - Health check endpoint
   - `GET /api/users/exists` - Check if users exist
   
-**Page Routes** (HTML - only accessed when hitting backend directly on port 8000):
-  - `GET /login` - Login page
-  - `GET /admin/dashboard` - Admin dashboard
-  - `GET /admin/newsletters` - Newsletter form
-  - `GET /admin/password` - Password change form
-  - `GET /initial_password` - Initial password setup
-  
-**Note**: In development, these GET routes are bypassed by Vite proxy and serve the React app instead.
+**Note**: The backend does NOT serve any HTML pages. All HTML/UI is served by the React frontend.
 
 ### Frontend (Port 3000)
 - **Purpose**: React SPA
@@ -60,10 +53,11 @@ The application is split into two services during development:
 ### Important Notes
 
 - **In development, ALWAYS use port 3000** for the web interface
-  - Port 3000 serves the React app for all GET requests
+  - Port 3000 serves the React app for all page navigations
   - Vite proxy forwards POST/API requests to port 8000
-- **Port 8000 can be accessed directly** but will serve old HTML forms (not recommended in development)
-- The Vite proxy configuration uses `bypass` to serve React app for GET requests to routes like `/login`, `/admin/*`
+- **Port 8000 is API-only** - accessing it directly in a browser will return JSON or 404
+- The Vite proxy configuration uses `bypass` to serve the React app for GET requests to page routes like `/login`, `/admin/*`
+- **Pure SPA Architecture**: The backend serves only JSON API endpoints, no HTML
 
 ## Request/Response Flow
 

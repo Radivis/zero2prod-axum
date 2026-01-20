@@ -9,7 +9,7 @@ use secrecy::{ExposeSecret, Secret};
 use tower_sessions::Session;
 
 use crate::authentication::{AuthError, Credentials, UserId, validate_credentials};
-use crate::routes::admin::dashboard::get_username;
+use crate::routes::admin::utils::get_username;
 
 #[derive(serde::Deserialize)]
 pub struct ChangePasswordFormData {
