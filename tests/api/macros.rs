@@ -8,46 +8,56 @@ pub mod function_name_macro {
     macro_rules! function_name {
         () => {{
             // First, try to extract from environment variables (works with nextest and cargo test)
-            // Nextest sets NEXTEST_TEST_NAME, cargo test uses --exact argument
-            let mut module_and_function = std::env::var("NEXTEST_TEST_NAME")
-                .ok()
-                .or_else(|| {
-                    std::env::args()
-                        .skip_while(|arg| arg != "--exact")
-                        .nth(1)
-                        .map(|s| s.to_string())
-                })
-                .and_then(|test_path| {
-                    // Test path format: "api::module::function_name" or "tests::api::module::function_name"
-                    let parts: Vec<&str> = test_path.split("::").collect();
+            // Nextest sets NEXTEST_TEST_NAME (v0.9.116+), cargo test uses --exact argument
+            let mut module_and_function = None;
 
-                    // Find where "api" appears
-                    if let Some(api_idx) = parts.iter().position(|s| *s == "api" || s.contains("api")) {
-                        if api_idx + 2 < parts.len() {
-                            let module = parts[api_idx + 1];
-                            let function = parts[api_idx + 2];
+            // Helper closure to extract module and function from test path
+            let extract_from_test_path = |test_path: &str| -> Option<String> {
+                // Test path format: "api::module::function_name" or "tests::api::module::function_name"
+                let parts: Vec<&str> = test_path.split("::").collect();
 
-                            // Validate these look like valid names
-                            let is_valid_module = !module.starts_with("_")
-                                && !module.contains("helpers")
-                                && module.chars().all(|c| c.is_alphanumeric() || c == '_');
+                // Find where "api" appears
+                if let Some(api_idx) = parts.iter().position(|s| *s == "api" || s.contains("api")) {
+                    if api_idx + 2 < parts.len() {
+                        let module = parts[api_idx + 1];
+                        let function = parts[api_idx + 2];
 
-                            let is_valid_func = !function.starts_with("_")
-                                && function.chars().any(|c| c.is_alphabetic());
+                        // Validate these look like valid names
+                        let is_valid_module = !module.starts_with("_")
+                            && !module.contains("helpers")
+                            && module.chars().all(|c| c.is_alphanumeric() || c == '_');
 
-                            if is_valid_module && is_valid_func {
-                                return Some(format!("{}-{}", module, function));
-                            }
+                        let is_valid_func = !function.starts_with("_")
+                            && function.chars().any(|c| c.is_alphabetic());
+
+                        if is_valid_module && is_valid_func {
+                            return Some(format!("{}-{}", module, function));
                         }
                     }
-                    None
-                });
+                }
+                None
+            };
+
+            // Try NEXTEST_TEST_NAME first
+            if let Ok(test_path) = std::env::var("NEXTEST_TEST_NAME") {
+                module_and_function = extract_from_test_path(&test_path);
+            }
+
+            // Try --exact argument (cargo test)
+            if module_and_function.is_none() {
+                if let Some(test_path) = std::env::args()
+                    .skip_while(|arg| arg != "--exact")
+                    .nth(1)
+                {
+                    module_and_function = extract_from_test_path(&test_path);
+                }
+            }
 
             // If environment variable extraction failed, try backtrace extraction
-            if module_and_function.is_none() {
-                let mut frame_count = 0;
-                let mut all_names = Vec::new();
+            let mut frame_count = 0;
+            let mut all_names = Vec::new();
 
+            if module_and_function.is_none() {
                 backtrace::trace(|frame| {
                     frame_count += 1;
                     // Skip the first frame (this macro itself)
@@ -122,11 +132,26 @@ pub mod function_name_macro {
             }
 
             module_and_function.unwrap_or_else(|| {
+                // Collect debug information
+                let env_vars: Vec<String> = std::env::vars()
+                    .filter(|(k, _)| k.starts_with("NEXTEST"))
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                let args: Vec<String> = std::env::args().collect();
+
                 panic!(
                     "Failed to extract module and function name.\n\
-                     Tried both environment variable extraction (--exact) and backtrace extraction.\n\
+                     Environment variables: {}\n\
+                     Command line args: {}\n\
+                     Frame count: {}\n\
+                     Symbol names found: {}\n\
+                     \n\
                      Make sure you're running tests with 'cargo test' or 'cargo nextest run'.\n\
-                     If using backtrace fallback, ensure debug symbols are available (debug = true in Cargo.toml)."
+                     If using backtrace fallback, ensure debug symbols are available (debug = true in Cargo.toml).",
+                    if env_vars.is_empty() { "none".to_string() } else { env_vars.join(", ") },
+                    args.join(" "),
+                    frame_count,
+                    if all_names.is_empty() { "none".to_string() } else { all_names.join(", ") }
                 )
             })
         }};
