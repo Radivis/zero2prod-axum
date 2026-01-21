@@ -22,7 +22,7 @@ async fn you_must_be_logged_in_to_see_the_change_password_form() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -43,7 +43,7 @@ async fn you_must_be_logged_in_to_change_your_password() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -69,7 +69,7 @@ async fn new_password_fields_must_match() {
     // Assert - Should return 400 JSON error
     assert_is_json_error(&response, 400);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -101,7 +101,7 @@ async fn current_password_must_be_valid() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -132,7 +132,7 @@ async fn new_password_must_have_at_least_12_characters() {
     // Assert - Should return 400 JSON error
     assert_is_json_error(&response, 400);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -163,7 +163,7 @@ async fn new_password_must_not_have_more_than_128_characters() {
     // Assert - Should return 400 JSON error
     assert_is_json_error(&response, 400);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -194,14 +194,14 @@ async fn changing_password_works() {
     // Assert - Should return 200 JSON success
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(success_body["success"].as_bool().unwrap());
     assert!(success_body["error"].is_null());
 
     // Act - Part 2 - Logout
     let logout_response = container.app.post_logout().await;
     assert_eq!(logout_response.status().as_u16(), 200);
     let logout_body: serde_json::Value = assert_json_response(logout_response).await;
-    assert_eq!(logout_body["success"].as_bool().unwrap(), true);
+    assert!(logout_body["success"].as_bool().unwrap());
 
     // Act - Part 3 - Login using the new password
     let login_body = serde_json::json!({
@@ -212,5 +212,5 @@ async fn changing_password_works() {
     let login_response = container.app.post_login_json(&login_body).await;
     assert_eq!(login_response.status().as_u16(), 200);
     let login_response_body: serde_json::Value = assert_json_response(login_response).await;
-    assert_eq!(login_response_body["success"].as_bool().unwrap(), true);
+    assert!(login_response_body["success"].as_bool().unwrap());
 }

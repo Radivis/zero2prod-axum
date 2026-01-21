@@ -46,7 +46,7 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Assert - Should return 200 JSON success
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(success_body["success"].as_bool().unwrap());
     assert_eq!(
         success_body["message"].as_str().unwrap(),
         NEWSLETTER_CONFIRMATION_MESSAGE
@@ -82,7 +82,7 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // Assert - Should return 200 JSON success
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(success_body["success"].as_bool().unwrap());
     assert_eq!(
         success_body["message"].as_str().unwrap(),
         NEWSLETTER_CONFIRMATION_MESSAGE
@@ -148,7 +148,7 @@ async fn you_must_be_logged_in_to_send_newsletters_form() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -169,7 +169,7 @@ async fn you_must_be_logged_in_to_send_newsletters() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -197,7 +197,7 @@ async fn newsletter_creation_is_idempotent() {
         .await;
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(success_body["success"].as_bool().unwrap());
     assert_eq!(
         success_body["message"].as_str().unwrap(),
         NEWSLETTER_CONFIRMATION_MESSAGE
@@ -210,7 +210,7 @@ async fn newsletter_creation_is_idempotent() {
         .await;
     assert_eq!(response.status().as_u16(), 200);
     let success_body2: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(success_body2["success"].as_bool().unwrap(), true);
+    assert!(success_body2["success"].as_bool().unwrap());
     assert_eq!(
         success_body2["message"].as_str().unwrap(),
         NEWSLETTER_CONFIRMATION_MESSAGE
@@ -285,7 +285,7 @@ async fn newsletter_are_sent_again_after_idempotency_key_expiry() {
     let status1 = response1.status();
     assert_eq!(status1.as_u16(), 200);
     let body1: serde_json::Value = assert_json_response(response1).await;
-    assert_eq!(body1["success"].as_bool().unwrap(), true);
+    assert!(body1["success"].as_bool().unwrap());
 
     let expired_timestamp = chrono::Utc::now() - chrono::Duration::hours(25);
     let user_id = container.test_user.user_id;

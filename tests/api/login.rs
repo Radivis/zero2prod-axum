@@ -18,7 +18,7 @@ async fn an_error_message_is_returned_on_failure() {
     // Assert - Should return 401 with JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -41,6 +41,6 @@ async fn returns_success_json_after_login_success() {
     // Assert - Should return 200 with success JSON
     assert_eq!(response.status().as_u16(), 200);
     let login_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(login_body["success"].as_bool().unwrap(), true);
+    assert!(login_body["success"].as_bool().unwrap());
     assert!(login_body["error"].is_null());
 }

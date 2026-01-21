@@ -119,32 +119,6 @@ impl TestApp {
         }
     }
 
-    // Our tests will only look at the HTML page, therefore
-    // we do not expose the underlying reqwest::Response
-
-    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/dashboard", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-    pub async fn get_admin_dashboard_html(&self) -> String {
-        self.get_admin_dashboard().await.text().await.unwrap()
-    }
-
-    pub async fn get_change_password(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/password", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_change_password_html(&self) -> String {
-        self.get_change_password().await.text().await.unwrap()
-    }
-
     pub async fn post_logout(&self) -> reqwest::Response {
         self.api_client
             .post(format!("{}/admin/logout", &self.address))
@@ -160,31 +134,6 @@ impl TestApp {
         self.api_client
             .post(format!("{}/admin/password", &self.address))
             .json(body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_login_html(&self) -> String {
-        self.api_client
-            .get(format!("{}/login", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-            .text()
-            .await
-            .unwrap()
-    }
-
-    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
-    where
-        Body: serde::Serialize,
-    {
-        self.api_client
-            .post(format!("{}/login", &self.address))
-            // This `reqwest` method makes sure that the body is URL-encoded
-            // and the `Content-Type` header is set accordingly.
-            .form(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -217,14 +166,6 @@ impl TestApp {
     pub async fn get_users_exist(&self) -> reqwest::Response {
         self.api_client
             .get(format!("{}/api/users/exists", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_newsletters(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/newsletters", &self.address))
             .send()
             .await
             .expect("Failed to execute request.")

@@ -23,7 +23,7 @@ async fn you_must_be_logged_in_to_access_the_admin_dashboard() {
     // Assert - Should return 401 JSON error
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
     assert!(
         error_body["error"]
             .as_str()
@@ -50,7 +50,7 @@ async fn logout_clears_session_state() {
         .expect("Failed to execute request.");
     assert_eq!(auth_response.status().as_u16(), 200);
     let auth_body: serde_json::Value = assert_json_response(auth_response).await;
-    assert_eq!(auth_body["authenticated"].as_bool().unwrap(), true);
+    assert!(auth_body["authenticated"].as_bool().unwrap());
     assert_eq!(
         auth_body["username"].as_str().unwrap(),
         container.test_user.username
@@ -60,7 +60,7 @@ async fn logout_clears_session_state() {
     let logout_response = container.app.post_logout().await;
     assert_eq!(logout_response.status().as_u16(), 200);
     let logout_body: serde_json::Value = assert_json_response(logout_response).await;
-    assert_eq!(logout_body["success"].as_bool().unwrap(), true);
+    assert!(logout_body["success"].as_bool().unwrap());
 
     // Act - Part 3 - Attempt to access admin endpoint after logout
     let response = container
@@ -78,5 +78,5 @@ async fn logout_clears_session_state() {
         .expect("Failed to execute request.");
     assert_is_json_error(&response, 401);
     let error_body: serde_json::Value = assert_json_response(response).await;
-    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(!error_body["success"].as_bool().unwrap());
 }
