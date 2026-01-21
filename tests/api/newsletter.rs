@@ -1,5 +1,5 @@
 use crate::helpers::{
-    ConfirmationLinks, TestApp, assert_is_json_error, assert_is_redirect_to, assert_json_response,
+    ConfirmationLinks, TestApp, assert_is_json_error, assert_json_response,
     mount_mock_email_server, spawn_app, spawn_app_container_with_user,
 };
 use crate::macros::function_name_macro::function_name;
@@ -81,12 +81,16 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         }))
         .await;
 
-    // Assert
-    assert_eq!(response.status().as_u16(), 303);
-
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
+    // Assert - Should return 200 JSON success
+    assert_eq!(response.status().as_u16(), 200);
+    let success_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(
+        success_body["message"]
+            .as_str()
+            .unwrap()
+            .contains("accepted")
+    );
 
     container.app.dispatch_all_pending_emails().await;
     // Mock verifies on Drop that we have sent the newsletter email
@@ -195,22 +199,30 @@ async fn newsletter_creation_is_idempotent() {
         .app
         .post_newsletters(&newsletter_request_body)
         .await;
-    assert_is_redirect_to(&response, "/admin/newsletters");
-
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
+    assert_eq!(response.status().as_u16(), 200);
+    let success_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(
+        success_body["message"]
+            .as_str()
+            .unwrap()
+            .contains("accepted")
+    );
 
     // Act - Part 2 - Submit newsletter form **again** (idempotent)
     let response = container
         .app
         .post_newsletters(&newsletter_request_body)
         .await;
-    assert_is_redirect_to(&response, "/admin/newsletters");
-
-    // Act - Part 4 - Follow the redirect
-    let html_page = container.app.get_newsletters().await.text().await.unwrap();
-    assert!(html_page.contains(NEWSLETTER_CONFIRMATION_MESSAGE));
+    assert_eq!(response.status().as_u16(), 200);
+    let success_body2: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(success_body2["success"].as_bool().unwrap(), true);
+    assert!(
+        success_body2["message"]
+            .as_str()
+            .unwrap()
+            .contains("accepted")
+    );
 
     container.app.dispatch_all_pending_emails().await;
     // Mock verifies on Drop that we have sent the newsletter email **once**

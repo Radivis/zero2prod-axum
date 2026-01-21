@@ -160,14 +160,41 @@ pub async fn publish_newsletter(
                 "Returning saved response due to idempotency: {:?}",
                 saved_response.status()
             );
-            // If the saved response is a redirect (old format), convert it to JSON
-            // Otherwise return it as-is (should be JSON if saved after migration)
+            // Always return JSON response - convert old redirect responses to JSON
+            // This ensures we maintain a clean JSON API regardless of what was saved before
             if saved_response.status() == StatusCode::SEE_OTHER
                 || saved_response.status() == StatusCode::FOUND
+                || saved_response.status() == StatusCode::TEMPORARY_REDIRECT
+                || saved_response.status() == StatusCode::PERMANENT_REDIRECT
             {
                 return Ok(success_response);
             }
-            return Ok(saved_response);
+            // For non-redirect saved responses, check if it's JSON
+            // If not, convert to JSON format
+            let (parts, body) = saved_response.into_parts();
+            let body_bytes = axum::body::to_bytes(body, usize::MAX).await.map_err(|e| {
+                PublishError::UnexpectedError(anyhow::anyhow!(
+                    "Failed to read saved response body: {}",
+                    e
+                ))
+            })?;
+
+            // Check if the saved response is JSON by checking Content-Type header
+            let is_json = parts
+                .headers
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|h| h.to_str().ok())
+                .map(|ct| ct.starts_with("application/json"))
+                .unwrap_or(false);
+
+            if is_json {
+                // Return the saved JSON response as-is
+                return Ok((parts.status, parts.headers, body_bytes).into_response());
+            } else {
+                // Convert non-JSON saved response to JSON format
+                tracing::warn!("Converting non-JSON saved response to JSON format");
+                return Ok(success_response);
+            }
         }
     };
 
