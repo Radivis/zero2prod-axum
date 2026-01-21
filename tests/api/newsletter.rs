@@ -15,8 +15,8 @@ fn when_sending_an_email() -> MockBuilder {
     Mock::given(path("/email")).and(method("POST"))
 }
 
-const NEWSLETTER_CONFIRMATION_MESSAGE: &str = "<p><i>The newsletter issue has been accepted - \
-emails will go out shortly.</i></p>";
+const NEWSLETTER_CONFIRMATION_MESSAGE: &str =
+    "The newsletter issue has been accepted - emails will go out shortly.";
 
 #[tokio::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
@@ -47,11 +47,9 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
     assert_eq!(success_body["success"].as_bool().unwrap(), true);
-    assert!(
-        success_body["message"]
-            .as_str()
-            .unwrap()
-            .contains("accepted")
+    assert_eq!(
+        success_body["message"].as_str().unwrap(),
+        NEWSLETTER_CONFIRMATION_MESSAGE
     );
 
     container.app.dispatch_all_pending_emails().await;
@@ -85,11 +83,9 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
     assert_eq!(success_body["success"].as_bool().unwrap(), true);
-    assert!(
-        success_body["message"]
-            .as_str()
-            .unwrap()
-            .contains("accepted")
+    assert_eq!(
+        success_body["message"].as_str().unwrap(),
+        NEWSLETTER_CONFIRMATION_MESSAGE
     );
 
     container.app.dispatch_all_pending_emails().await;
@@ -202,11 +198,9 @@ async fn newsletter_creation_is_idempotent() {
     assert_eq!(response.status().as_u16(), 200);
     let success_body: serde_json::Value = assert_json_response(response).await;
     assert_eq!(success_body["success"].as_bool().unwrap(), true);
-    assert!(
-        success_body["message"]
-            .as_str()
-            .unwrap()
-            .contains("accepted")
+    assert_eq!(
+        success_body["message"].as_str().unwrap(),
+        NEWSLETTER_CONFIRMATION_MESSAGE
     );
 
     // Act - Part 2 - Submit newsletter form **again** (idempotent)
@@ -217,11 +211,9 @@ async fn newsletter_creation_is_idempotent() {
     assert_eq!(response.status().as_u16(), 200);
     let success_body2: serde_json::Value = assert_json_response(response).await;
     assert_eq!(success_body2["success"].as_bool().unwrap(), true);
-    assert!(
-        success_body2["message"]
-            .as_str()
-            .unwrap()
-            .contains("accepted")
+    assert_eq!(
+        success_body2["message"].as_str().unwrap(),
+        NEWSLETTER_CONFIRMATION_MESSAGE
     );
 
     container.app.dispatch_all_pending_emails().await;
