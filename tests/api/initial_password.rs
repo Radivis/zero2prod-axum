@@ -1,9 +1,9 @@
 use crate::helpers::{assert_is_redirect_to, spawn_app, spawn_app_container_with_user};
-
+use crate::macros::function_name_macro::function_name;
 #[tokio::test]
 async fn create_initial_admin_when_no_users_exist() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
 
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
@@ -51,7 +51,7 @@ async fn create_initial_admin_when_no_users_exist() {
 #[tokio::test]
 async fn reject_initial_password_when_users_already_exist() {
     // Arrange - Create a user first
-    let container = spawn_app_container_with_user().await;
+    let container = spawn_app_container_with_user(function_name!()).await;
 
     // Act - Try to create initial admin
     let response = container
@@ -74,7 +74,7 @@ async fn reject_initial_password_when_users_already_exist() {
 #[tokio::test]
 async fn reject_when_passwords_do_not_match() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)
@@ -101,7 +101,7 @@ async fn reject_when_passwords_do_not_match() {
 #[tokio::test]
 async fn reject_password_too_short() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)
@@ -128,7 +128,7 @@ async fn reject_password_too_short() {
 #[tokio::test]
 async fn reject_password_too_long() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)
@@ -156,7 +156,7 @@ async fn reject_password_too_long() {
 #[tokio::test]
 async fn check_users_exist_endpoint_returns_false_when_no_users() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)
@@ -175,7 +175,7 @@ async fn check_users_exist_endpoint_returns_false_when_no_users() {
 #[tokio::test]
 async fn check_users_exist_endpoint_returns_true_when_users_exist() {
     // Arrange
-    let container = spawn_app_container_with_user().await;
+    let container = spawn_app_container_with_user(function_name!()).await;
 
     // Act
     let response = container.app.get_users_exist().await;
@@ -189,7 +189,7 @@ async fn check_users_exist_endpoint_returns_true_when_users_exist() {
 #[tokio::test]
 async fn can_login_after_creating_initial_admin() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)
@@ -226,7 +226,7 @@ async fn can_login_after_creating_initial_admin() {
 #[tokio::test]
 async fn password_with_spaces_is_valid_if_non_space_chars_meet_minimum() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Delete any seeded users from migrations
     sqlx::query!("DELETE FROM users")
         .execute(&app.db_connection_pool)

@@ -1,42 +1,46 @@
-use crate::helpers::{assert_is_redirect_to, spawn_app, spawn_app_container_with_user};
+use crate::helpers::{
+    assert_is_json_error, assert_json_response, spawn_app, spawn_app_container_with_user,
+};
+use crate::macros::function_name_macro::function_name;
 
 #[tokio::test]
-async fn an_error_flash_message_is_set_on_failure() {
+async fn an_error_message_is_returned_on_failure() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Act
     let login_body = serde_json::json!({
         "username": "random-username",
         "password": "random-password"
     });
 
-    let response = app.post_login(&login_body).await;
+    let response = app.post_login_json(&login_body).await;
 
-    // Assert
-    assert_is_redirect_to(&response, "/login");
-
-    // Act - Part 2 - Follow the redirect
-    let html_page = app.get_login_html().await;
-    assert!(html_page.contains(r#"<p><i>Authentication failed</i></p>"#));
-
-    // Act - Part 3 - Reload the login page
-    let html_page = app.get_login_html().await;
-    assert!(!html_page.contains(r#"Authentication failed"#));
+    // Assert - Should return 401 with JSON error
+    assert_is_json_error(&response, 401);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("Authentication failed")
+    );
 }
 
 #[tokio::test]
-async fn redirect_to_admin_dashboard_after_login_success() {
+async fn returns_success_json_after_login_success() {
     // Arrange
-    let container = spawn_app_container_with_user().await;
-    // Act - Part 1 - Login
+    let container = spawn_app_container_with_user(function_name!()).await;
+    // Act - Login
     let login_body = serde_json::json!({
         "username": &container.test_user.username,
         "password": &container.test_user.password
     });
-    let response = container.app.post_login(&login_body).await;
-    assert_is_redirect_to(&response, "/admin/dashboard");
+    let response = container.app.post_login_json(&login_body).await;
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_admin_dashboard_html().await;
-    assert!(html_page.contains(&format!("Welcome {}", container.test_user.username)));
+    // Assert - Should return 200 with success JSON
+    assert_eq!(response.status().as_u16(), 200);
+    let login_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(login_body["success"].as_bool().unwrap(), true);
+    assert!(login_body["error"].is_null());
 }

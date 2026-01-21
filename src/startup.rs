@@ -12,8 +12,8 @@ use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::{
-    change_password, check_users_exist_endpoint, confirm, create_initial_password, health_check,
-    log_out, login, publish_newsletter, subscribe,
+    auth_check_endpoint, change_password, check_users_exist_endpoint, confirm,
+    create_initial_password, health_check, log_out, login, publish_newsletter, subscribe,
 };
 use axum::extract::FromRequestParts;
 use axum::extract::Request;
@@ -107,6 +107,7 @@ impl Application {
         let app = Router::new()
             .route("/health_check", get(health_check))
             .route("/api/users/exists", get(check_users_exist_endpoint))
+            .route("/api/auth/me", get(auth_check_endpoint))
             .route("/login", post(login))
             .route("/initial_password", post(create_initial_password))
             .route("/subscriptions", post(subscribe))

@@ -1,7 +1,7 @@
 mod logout;
 mod newsletters;
 mod password;
-mod utils;
+pub mod utils;
 
 pub use logout::log_out;
 pub use newsletters::*;

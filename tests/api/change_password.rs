@@ -1,19 +1,34 @@
-use crate::helpers::{assert_is_redirect_to, spawn_app, spawn_app_container_with_user};
+use crate::helpers::{
+    assert_is_json_error, assert_json_response, spawn_app, spawn_app_container_with_user,
+};
+use crate::macros::function_name_macro::function_name;
 use uuid::Uuid;
 #[tokio::test]
 async fn you_must_be_logged_in_to_see_the_change_password_form() {
     // Arrange
-    let app = spawn_app().await;
-    // Act
-    let response = app.get_change_password().await;
-    // Assert
-    assert_is_redirect_to(&response, "/login");
+    let app = spawn_app(function_name!()).await;
+    // Act - Try to access change password endpoint without auth
+    let response = app
+        .api_client
+        .post(format!("{}/admin/password", &app.address))
+        .json(&serde_json::json!({
+            "current_password": "test",
+            "new_password": "test",
+            "new_password_check": "test",
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+    // Assert - Should return 401 JSON error
+    assert_is_json_error(&response, 401);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
 }
 
 #[tokio::test]
 async fn you_must_be_logged_in_to_change_your_password() {
     // Arrange
-    let container = spawn_app_container_with_user().await;
+    let container = spawn_app_container_with_user(function_name!()).await;
     let new_password = Uuid::new_v4().to_string();
     // Act
     let response = container
@@ -25,18 +40,23 @@ async fn you_must_be_logged_in_to_change_your_password() {
         }))
         .await;
 
-    // Assert
-    assert_is_redirect_to(&response, "/login");
+    // Assert - Should return 401 JSON error
+    assert_is_json_error(&response, 401);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
 }
 
 #[tokio::test]
 async fn new_password_fields_must_match() {
     // Arrange
-    let container = spawn_app_container_with_user().await.login().await;
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
     let new_password = Uuid::new_v4().to_string();
     let another_new_password = Uuid::new_v4().to_string();
 
-    // Act - Part 1 - Try to change password
+    // Act - Try to change password with mismatched passwords
     let response = container
         .app
         .post_change_password(&serde_json::json!({
@@ -45,24 +65,30 @@ async fn new_password_fields_must_match() {
             "new_password_check": &another_new_password,
         }))
         .await;
-    assert_is_redirect_to(&response, "/admin/password");
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_change_password_html().await;
-    assert!(html_page.contains(
-        "<p><i>You entered two different new passwords - \
-        the field values must match.</i></p>"
-    ));
+    // Assert - Should return 400 JSON error
+    assert_is_json_error(&response, 400);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("two different new passwords")
+    );
 }
 
 #[tokio::test]
 async fn current_password_must_be_valid() {
     // Arrange
-    let container = spawn_app_container_with_user().await.login().await;
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
     let new_password = Uuid::new_v4().to_string();
     let wrong_password = Uuid::new_v4().to_string();
 
-    // Act - Part 1 - Try to change password
+    // Act - Try to change password with wrong current password
     let response = container
         .app
         .post_change_password(&serde_json::json!({
@@ -71,21 +97,29 @@ async fn current_password_must_be_valid() {
             "new_password_check": &new_password,
         }))
         .await;
-    // Assert
-    assert_is_redirect_to(&response, "/admin/password");
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_change_password_html().await;
-    assert!(html_page.contains("<p><i>The current password is incorrect.</i></p>"));
+    // Assert - Should return 401 JSON error
+    assert_is_json_error(&response, 401);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("current password is incorrect")
+    );
 }
 
 #[tokio::test]
 async fn new_password_must_have_at_least_12_characters() {
     // Arrange
-    let container = spawn_app_container_with_user().await.login().await;
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
     let new_password = "0123456789 a";
 
-    // Act - Part 1 - Try to change password
+    // Act - Try to change password with too short password
     let response = container
         .app
         .post_change_password(&serde_json::json!({
@@ -94,23 +128,29 @@ async fn new_password_must_have_at_least_12_characters() {
             "new_password_check": &new_password,
         }))
         .await;
-    // Assert
-    assert_is_redirect_to(&response, "/admin/password");
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_change_password_html().await;
-    assert!(html_page.contains(
-        "<p><i>The new password must have at least 12 characters besides spaces.</i></p>"
-    ));
+    // Assert - Should return 400 JSON error
+    assert_is_json_error(&response, 400);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
+    assert!(
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("at least 12 characters besides spaces")
+    );
 }
 
 #[tokio::test]
 async fn new_password_must_not_have_more_than_128_characters() {
     // Arrange
-    let container = spawn_app_container_with_user().await.login().await;
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
     let new_password = "12345678".repeat(16) + ".";
 
-    // Act - Part 1 - Try to change password
+    // Act - Try to change password with too long password
     let response = container
         .app
         .post_change_password(&serde_json::json!({
@@ -119,21 +159,26 @@ async fn new_password_must_not_have_more_than_128_characters() {
             "new_password_check": &new_password,
         }))
         .await;
-    // Assert
-    assert_is_redirect_to(&response, "/admin/password");
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_change_password_html().await;
+    // Assert - Should return 400 JSON error
+    assert_is_json_error(&response, 400);
+    let error_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(error_body["success"].as_bool().unwrap(), false);
     assert!(
-        html_page
-            .contains("<p><i>The new password must not have more than 128 characters.</i></p>")
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("not have more than 128 characters")
     );
 }
 
 #[tokio::test]
 async fn changing_password_works() {
     // Arrange
-    let container = spawn_app_container_with_user().await.login().await;
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
     let new_password = Uuid::new_v4().to_string();
 
     // Act - Part 1 - Change password
@@ -145,26 +190,27 @@ async fn changing_password_works() {
             "new_password_check": &new_password,
         }))
         .await;
-    assert_is_redirect_to(&response, "/admin/password");
 
-    // Act - Part 2 - Follow the redirect
-    let html_page = container.app.get_change_password_html().await;
-    assert!(html_page.contains("<p><i>Your password has been changed.</i></p>"));
+    // Assert - Should return 200 JSON success
+    assert_eq!(response.status().as_u16(), 200);
+    let success_body: serde_json::Value = assert_json_response(response).await;
+    assert_eq!(success_body["success"].as_bool().unwrap(), true);
+    assert!(success_body["error"].is_null());
 
-    // Act - Part 3 - Logout
-    let response = container.app.post_logout().await;
-    assert_is_redirect_to(&response, "/login");
+    // Act - Part 2 - Logout
+    let logout_response = container.app.post_logout().await;
+    assert_eq!(logout_response.status().as_u16(), 200);
+    let logout_body: serde_json::Value = assert_json_response(logout_response).await;
+    assert_eq!(logout_body["success"].as_bool().unwrap(), true);
 
-    // Act - Part 4 - Follow the redirect
-    let html_page = container.app.get_login_html().await;
-    assert!(html_page.contains("<p><i>You have successfully logged out.</i></p>"));
-
-    // Act - Part 5 - Login using the new password
+    // Act - Part 3 - Login using the new password
     let login_body = serde_json::json!({
         "username": &container.test_user.username,
         "password": &new_password
     });
 
-    let response = container.app.post_login(&login_body).await;
-    assert_is_redirect_to(&response, "/admin/dashboard");
+    let login_response = container.app.post_login_json(&login_body).await;
+    assert_eq!(login_response.status().as_u16(), 200);
+    let login_response_body: serde_json::Value = assert_json_response(login_response).await;
+    assert_eq!(login_response_body["success"].as_bool().unwrap(), true);
 }

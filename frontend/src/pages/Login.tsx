@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Paper,
   TextField,
@@ -21,6 +21,7 @@ function Login() {
   const [password, setPassword] = useState('')
   const [checking, setChecking] = useState(true)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     const checkUsersExist = async () => {
@@ -57,8 +58,28 @@ function Login() {
 
       return response.json()
     },
-    onSuccess: () => {
-      navigate('/admin/dashboard')
+    onSuccess: async () => {
+      // After successful login, verify authentication and update the query cache
+      // This prevents ProtectedRoute from redirecting back to login
+      try {
+        const authResponse = await fetch('/api/auth/me', {
+          credentials: 'include',
+        })
+        
+        if (authResponse.ok) {
+          const authData = await authResponse.json()
+          // Set the query data so ProtectedRoute knows we're authenticated
+          // Note: We set it temporarily, but ProtectedRoute will fetch fresh data
+          queryClient.setQueryData(['auth-check'], authData)
+          navigate('/admin/dashboard')
+        } else {
+          // If auth check fails, still try to navigate (might be a timing issue)
+          navigate('/admin/dashboard')
+        }
+      } catch (error) {
+        // If auth check fails, still try to navigate
+        navigate('/admin/dashboard')
+      }
     },
   })
 

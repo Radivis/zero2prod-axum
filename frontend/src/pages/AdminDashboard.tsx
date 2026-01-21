@@ -13,20 +13,22 @@ import {
 } from '@mui/material'
 import { apiRequest } from '../api/client'
 
+interface AuthCheckResponse {
+  authenticated: boolean
+  username: string | null
+}
+
 function AdminDashboard() {
   const navigate = useNavigate()
 
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard-auth'],
     queryFn: async () => {
-      // For now, we'll need to parse the HTML response or create a JSON endpoint
-      // Since the backend still returns HTML, we'll handle 401 redirects
-      const response = await fetch('/admin/dashboard', {
+      const response = await fetch('/api/auth/me', {
         credentials: 'include',
       })
 
       if (response.status === 401 || response.status === 403) {
-        navigate('/login')
         throw new Error('Unauthorized')
       }
 
@@ -34,13 +36,16 @@ function AdminDashboard() {
         throw new Error('Failed to load dashboard')
       }
 
-      // Parse HTML to extract username (temporary until backend returns JSON)
-      const html = await response.text()
-      const match = html.match(/Welcome\s+([^!]+)!/)
-      const username = match ? match[1].trim() : 'Admin'
-      return { username }
+      const data: AuthCheckResponse = await response.json()
+      if (!data.authenticated || !data.username) {
+        throw new Error('Unauthorized')
+      }
+      return { username: data.username }
     },
     retry: false,
+    // Disable caching for session checks
+    gcTime: 0,
+    staleTime: 0,
   })
 
   const logoutMutation = useMutation({

@@ -91,12 +91,17 @@ impl TestAppContainerWithUser {
     pub async fn login(self) -> Self {
         let response = self
             .app
-            .post_login(&serde_json::json!({
+            .post_login_json(&serde_json::json!({
                 "username": self.test_user.username,
                 "password": self.test_user.password
             }))
             .await;
-        assert_is_redirect_to(&response, "/admin/dashboard");
+        assert_eq!(response.status().as_u16(), 200);
+        let login_body: serde_json::Value = response
+            .json()
+            .await
+            .expect("Failed to parse login response");
+        assert!(login_body["success"].as_bool().unwrap());
         self
     }
 }
@@ -154,7 +159,7 @@ impl TestApp {
     {
         self.api_client
             .post(format!("{}/admin/password", &self.address))
-            .form(body)
+            .json(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -231,17 +236,19 @@ impl TestApp {
     {
         self.api_client
             .post(format!("{}/admin/newsletters", &self.address))
-            .form(body)
+            .json(body)
             .send()
             .await
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+    pub async fn post_subscriptions<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
         self.api_client
             .post(format!("{}/subscriptions", &self.address))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(body)
+            .json(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -328,8 +335,9 @@ impl TestUser {
     }
 }
 
-#[tracing::instrument(name = "Spawning test application")]
-pub async fn spawn_app() -> TestApp {
+#[tracing::instrument(name = "Spawning test application", skip_all)]
+pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
+    let test_name = test_name.as_ref();
     // The first time `initialize` is invoked the code in `TRACING` is executed.
     // All other invocations will instead skip execution.
     LazyLock::force(&TRACING);
@@ -341,7 +349,7 @@ pub async fn spawn_app() -> TestApp {
     let configuration = {
         let mut c = get_configuration().expect("Failed to read configuration.");
         // Use a different database for each test case
-        c.database.database_name = format!("test_{}", Uuid::new_v4());
+        c.database.database_name = format!("test_{}", test_name);
         // Use a random OS port
         c.application.port = 0;
         c.email_client.base_url = email_server.uri();
@@ -376,9 +384,9 @@ pub async fn spawn_app() -> TestApp {
     }
 }
 
-#[tracing::instrument(name = "Spawning test application with user")]
-pub async fn spawn_app_container_with_user() -> TestAppContainerWithUser {
-    spawn_app().await.make_container_with_user().await
+#[tracing::instrument(name = "Spawning test application with user", skip_all)]
+pub async fn spawn_app_container_with_user(test_name: impl AsRef<str>) -> TestAppContainerWithUser {
+    spawn_app(test_name).await.make_container_with_user().await
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
@@ -392,6 +400,13 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to Postgres");
+    // Drop database from previous test
+    connection
+        .execute(format!(r#"DROP DATABASE IF EXISTS "{}";"#, config.database_name).as_str())
+        .await
+        .expect("Failed to drop database.");
+
+    // Create database
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
@@ -424,6 +439,27 @@ pub async fn mount_mock_email_server(
 pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
     assert_eq!(response.status().as_u16(), 303);
     assert_eq!(response.headers().get("Location").unwrap(), location);
+}
+
+pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
+    assert_eq!(response.status().as_u16(), expected_status);
+    assert_eq!(
+        response.headers().get("Content-Type").unwrap(),
+        "application/json"
+    );
+}
+
+pub async fn assert_json_response<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+) -> T {
+    assert_eq!(
+        response.headers().get("Content-Type").unwrap(),
+        "application/json"
+    );
+    response
+        .json()
+        .await
+        .expect("Failed to parse JSON response")
 }
 
 pub async fn retry<F, Fut, T>(mut f: F, max_retries: u8) -> T

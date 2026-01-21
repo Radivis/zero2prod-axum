@@ -30,7 +30,6 @@ pub async fn login(
     State(state): State<AppState>,
     Json(form): Json<FormData>,
 ) -> impl axum::response::IntoResponse {
-    let typed_session = TypedSession(session.clone());
     let credentials = Credentials {
         username: form.username,
         password: form.password,
@@ -40,7 +39,9 @@ pub async fn login(
     match validate_credentials(credentials, &state.db).await {
         Ok(user_id) => {
             tracing::Span::current().record("user_id", tracing::field::display(&user_id));
-            typed_session.renew().await;
+            // Use the session directly (don't clone) to ensure changes persist
+            let typed_session = TypedSession(session);
+            // Insert user_id first, then renew the session
             if let Err(e) = typed_session.insert_user_id(user_id).await {
                 tracing::error!("Failed to insert user_id into session: {:?}", e);
                 return (
@@ -52,6 +53,8 @@ pub async fn login(
                 )
                     .into_response();
             }
+            // Renew the session after inserting user_id to extend its lifetime
+            typed_session.renew().await;
             (
                 StatusCode::OK,
                 Json(LoginResponse {

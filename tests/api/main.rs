@@ -4,6 +4,7 @@ mod health_check;
 mod helpers;
 mod initial_password;
 mod login;
+mod macros;
 mod newsletter;
 mod subscriptions;
 mod subscriptions_confirm;

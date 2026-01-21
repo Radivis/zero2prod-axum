@@ -67,3 +67,4 @@ serde_urlencoded = "0.7.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "ansi"] }
 wiremock = "0.6"
+backtrace = "0.3"

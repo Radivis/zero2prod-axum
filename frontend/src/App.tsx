@@ -6,7 +6,9 @@ import InitialPassword from './pages/InitialPassword'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminNewsletter from './pages/AdminNewsletter'
 import AdminPassword from './pages/AdminPassword'
+import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
+import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
   return (
@@ -17,9 +19,31 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/initial_password" element={<InitialPassword />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/newsletters" element={<AdminNewsletter />} />
-            <Route path="/admin/password" element={<AdminPassword />} />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/newsletters"
+              element={
+                <ProtectedRoute>
+                  <AdminNewsletter />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/password"
+              element={
+                <ProtectedRoute>
+                  <AdminPassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Container>
       </Layout>

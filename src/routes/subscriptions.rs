@@ -62,6 +62,8 @@ impl std::error::Error for StoreTokenError {
 pub enum SubscribeError {
     #[error("{0}")]
     ValidationError(String),
+    #[error("{0}")]
+    MissingFieldsError(String),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -80,6 +82,7 @@ impl From<String> for SubscribeError {
 impl axum::response::IntoResponse for SubscribeError {
     fn into_response(self) -> axum::response::Response {
         let status = match self {
+            SubscribeError::MissingFieldsError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             SubscribeError::ValidationError(_) => StatusCode::BAD_REQUEST,
             SubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };

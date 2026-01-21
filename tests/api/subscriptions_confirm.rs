@@ -1,9 +1,10 @@
 use crate::helpers::{mount_mock_email_server, spawn_app};
+use crate::macros::function_name_macro::function_name;
 
 #[tokio::test]
 async fn confirmations_without_token_are_rejected_with_a_400() {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(function_name!()).await;
     // Act
     let response = reqwest::get(&format!("{}/subscriptions/confirm", app.address))
         .await
@@ -15,10 +16,13 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
 #[tokio::test]
 async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     // Arrange
-    let app = spawn_app().await;
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let app = spawn_app(function_name!()).await;
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
     let _ = mount_mock_email_server(&app.email_server, None).await;
-    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions(&body).await;
 
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
     let confirmation_links = app.get_confirmation_links(email_request);
@@ -31,10 +35,13 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
 #[tokio::test]
 async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
     // Arrange
-    let app = spawn_app().await;
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let app = spawn_app(function_name!()).await;
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
     let _ = mount_mock_email_server(&app.email_server, None).await;
-    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions(&body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
     let confirmation_links = app.get_confirmation_links(email_request);
     // Act
