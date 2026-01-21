@@ -1,5 +1,5 @@
 pub mod function_name_macro {
-    /// Macro that extracts the name of the function it's called from.
+    /// Macro that extracts the module name and function name, returning "{module}_{function}".
     /// Usage: `let name = function_name!();`
     ///
     /// This macro uses the backtrace crate to extract the calling function name at runtime.
@@ -7,7 +7,7 @@ pub mod function_name_macro {
     #[macro_export]
     macro_rules! function_name {
         () => {{
-            let mut function_name = None;
+            let mut module_and_function = None;
             let mut frame_count = 0;
             let mut all_names = Vec::new();
 
@@ -19,7 +19,7 @@ pub mod function_name_macro {
                 }
 
                 backtrace::resolve(frame.ip(), |symbol| {
-                    if function_name.is_none() {
+                    if module_and_function.is_none() {
                         if let Some(name) = symbol.name() {
                             let name_str = name.to_string();
                             all_names.push(name_str.clone());
@@ -33,47 +33,59 @@ pub mod function_name_macro {
                                 || (name_str.contains("::tests::") && !name_str.contains("helpers::"));
 
                             if is_test_function {
-                                // The function name might be before the hash suffix in mangled names
+                                // Extract module and function name from mangled format
                                 // e.g., "api::health_check::health_check_works::h87ccb05bfd20b6d2"
-                                // We want "health_check_works"
+                                // We want "health_check_health_check_works" (module_function)
 
-                                // Try to extract from mangled format first
                                 let parts: Vec<&str> = name_str.split("::").collect();
-                                if let Some(last_part) = parts.last() {
-                                    // If the last part looks like a hash (starts with 'h' and is hex),
-                                    // get the second-to-last part
-                                    let candidate = if last_part.starts_with('h') && last_part.len() > 10 {
-                                        // Likely a hash, use the part before it
-                                        parts.get(parts.len().saturating_sub(2)).copied()
-                                    } else {
-                                        Some(*last_part)
-                                    };
 
-                                    if let Some(func_name) = candidate.filter(|s| {
-                                        // Filter out closures and internal Rust symbols
-                                        !s.contains("{{closure}}")
+                                // Filter out hash suffixes and invalid parts
+                                let relevant_parts: Vec<&str> = parts
+                                    .iter()
+                                    .filter(|s| {
+                                        let s = s.trim();
+                                        // Filter out hash suffixes (h followed by hex digits, length > 10)
+                                        !(s.starts_with('h') && s.len() > 10 && s.chars().skip(1).all(|c| c.is_ascii_hexdigit()))
+                                            && !s.contains("{{closure}}")
                                             && !s.starts_with('<')
                                             && !s.is_empty()
-                                            && *s != "fn"
-                                            && !s.starts_with("function_name")
-                                            && !s.contains("spawn_app")
-                                            && !s.contains("helpers::")
-                                            && !s.starts_with("_")
-                                            && !s.chars().all(|c| c.is_ascii_hexdigit() || c == 'h') // Not just a hash
-                                    }) {
-                                        function_name = Some(func_name.to_string());
+                                    })
+                                    .copied()
+                                    .collect();
+
+                                // Pattern: api::module::function or tests::api::module::function
+                                // Find where "api" appears, then module is next, function is after that
+                                if let Some(api_idx) = relevant_parts.iter().position(|s| *s == "api" || s.contains("api")) {
+                                    if api_idx + 2 < relevant_parts.len() {
+                                        let candidate_module = relevant_parts[api_idx + 1];
+                                        let candidate_func = relevant_parts[api_idx + 2];
+
+                                        // Validate these look like valid names
+                                        let is_valid_module = !candidate_module.starts_with("_")
+                                            && !candidate_module.contains("helpers")
+                                            && candidate_module.chars().all(|c| c.is_alphanumeric() || c == '_');
+
+                                        let is_valid_func = !candidate_func.starts_with("function_name")
+                                            && !candidate_func.contains("spawn_app")
+                                            && !candidate_func.contains("helpers::")
+                                            && !candidate_func.starts_with("_")
+                                            && candidate_func.chars().any(|c| c.is_alphabetic());
+
+                                        if is_valid_module && is_valid_func {
+                                            module_and_function = Some(format!("{}-{}", candidate_module, candidate_func));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 });
-                function_name.is_none() // Continue until we find a function name
+                module_and_function.is_none() // Continue until we find a function name
             });
 
-            function_name.unwrap_or_else(|| {
+            module_and_function.unwrap_or_else(|| {
                 panic!(
-                    "Failed to extract function name from backtrace.\n\
+                    "Failed to extract module and function name from backtrace.\n\
                      Frame count: {}\n\
                      Symbol names found: {}\n\
                      Make sure you're compiling with debug symbols (debug = true in Cargo.toml or use 'cargo test' which includes debug info).",

@@ -349,7 +349,7 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
     let configuration = {
         let mut c = get_configuration().expect("Failed to read configuration.");
         // Use a different database for each test case
-        c.database.database_name = format!("test_{}", test_name);
+        c.database.database_name = format!("test-{}", test_name);
         // Use a random OS port
         c.application.port = 0;
         c.email_client.base_url = email_server.uri();
