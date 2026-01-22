@@ -14,6 +14,25 @@ const queryClient = new QueryClient({
       retry: 1,
     },
   },
+  logger: {
+    log: (...args) => {
+      // Filter out expected 401 errors from auth checks
+      const message = args.join(' ')
+      if (message.includes('401') && message.includes('/api/auth/me')) {
+        return // Suppress expected 401 errors
+      }
+      console.log(...args)
+    },
+    warn: console.warn,
+    error: (...args) => {
+      // Filter out expected 401 errors from auth checks
+      const message = args.join(' ')
+      if (message.includes('401') && message.includes('/api/auth/me')) {
+        return // Suppress expected 401 errors
+      }
+      console.error(...args)
+    },
+  },
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

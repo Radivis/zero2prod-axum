@@ -12,7 +12,12 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <Layout>
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Routes>

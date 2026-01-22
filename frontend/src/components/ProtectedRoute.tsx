@@ -26,6 +26,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         credentials: 'include',
       })
 
+      // 401 is expected when not authenticated - handle gracefully
       if (response.status === 401) {
         return { authenticated: false, username: null }
       }
