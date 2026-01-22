@@ -1,11 +1,12 @@
 use crate::helpers::{mount_mock_email_server, retry, spawn_app};
+use crate::macros::function_name_macro::function_name;
 use wiremock::Times;
 
 #[tokio::test]
 #[tracing::instrument(name = "subscribe_returns_a_200_for_valid_form_data")]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
@@ -14,8 +15,11 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     mount_mock_email_server(&test_app.email_server, None).await;
 
     // Act
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    let response = test_app.post_subscriptions(body.into()).await;
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
+    let response = test_app.post_subscriptions(&body).await;
 
     // Assert
     assert_eq!(200, response.status().as_u16());
@@ -25,7 +29,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 #[tracing::instrument(name = "subscribe_persists_the_new_subscriber")]
 async fn subscribe_persists_the_new_subscriber() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
@@ -35,8 +39,11 @@ async fn subscribe_persists_the_new_subscriber() {
     let _ = mount_mock_email_server(&test_app.email_server, Some(times)).await;
 
     // Act
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    test_app.post_subscriptions(body.into()).await;
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
+    test_app.post_subscriptions(&body).await;
 
     // Assert
     let saved = retry(
@@ -58,19 +65,22 @@ async fn subscribe_persists_the_new_subscriber() {
 #[tracing::instrument(name = "subscribe_returns_a_400_when_data_is_missing")]
 async fn subscribe_returns_a_400_when_data_is_missing() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
     );
     let test_cases = vec![
-        ("name=le%20guin", "missing the email"),
-        ("email=ursula_le_guin%40gmail.com", "missing the name"),
-        ("", "missing both name and email"),
+        (serde_json::json!({"name": "le guin"}), "missing the email"),
+        (
+            serde_json::json!({"email": "ursula_le_guin@gmail.com"}),
+            "missing the name",
+        ),
+        (serde_json::json!({}), "missing both name and email"),
     ];
     for (invalid_body, error_message) in test_cases {
         // Act
-        let response = test_app.post_subscriptions(invalid_body.into()).await;
+        let response = test_app.post_subscriptions(&invalid_body).await;
 
         // Assert
         assert_eq!(
@@ -87,19 +97,28 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 #[tracing::instrument(name = "subscribe_returns_a_400_when_fields_are_present_but_invalid")]
 async fn subscribe_returns_a_400_when_fields_are_present_but_invalid() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
     );
     let test_cases = vec![
-        ("name=&email=ursula_le_guin%40gmail.com", "empty name"),
-        ("name=Ursula&email=", "empty email"),
-        ("name=Ursula&email=definitely-not-an-email", "invalid email"),
+        (
+            serde_json::json!({"name": "", "email": "ursula_le_guin@gmail.com"}),
+            "empty name",
+        ),
+        (
+            serde_json::json!({"name": "Ursula", "email": ""}),
+            "empty email",
+        ),
+        (
+            serde_json::json!({"name": "Ursula", "email": "definitely-not-an-email"}),
+            "invalid email",
+        ),
     ];
     for (invalid_body, error_message) in test_cases {
         // Act
-        let response = test_app.post_subscriptions(invalid_body.into()).await;
+        let response = test_app.post_subscriptions(&invalid_body).await;
 
         // Assert
         assert_eq!(
@@ -116,16 +135,19 @@ async fn subscribe_returns_a_400_when_fields_are_present_but_invalid() {
 #[tracing::instrument(name = "subscribe_sends_a_confirmation_email_for_valid_data")]
 async fn subscribe_sends_a_confirmation_email_for_valid_data() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
     );
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
     let times: Times = (1..).into();
     let _ = mount_mock_email_server(&test_app.email_server, Some(times)).await;
     // Act
-    test_app.post_subscriptions(body.into()).await;
+    test_app.post_subscriptions(&body).await;
     // Assert
     // Mock
 }
@@ -134,16 +156,19 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
 #[tracing::instrument(name = "subscribe_sends_a_confirmation_email_with_a_link")]
 async fn subscribe_sends_a_confirmation_email_with_a_link() {
     // Arrange
-    let test_app = spawn_app().await;
+    let test_app = spawn_app(function_name!()).await;
     tracing::debug!(
         "test_app started with email_server: {:?}",
         &test_app.email_server
     );
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
     let _ = mount_mock_email_server(&test_app.email_server, None).await;
 
     // Act
-    test_app.post_subscriptions(body.into()).await;
+    test_app.post_subscriptions(&body).await;
 
     // Assert
     // Get the first intercepted request
@@ -156,15 +181,18 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
 #[tokio::test]
 async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     // Arrange
-    let app = spawn_app().await;
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let app = spawn_app(function_name!()).await;
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
     // Sabotage the database by trying to drop a cloumn that doesn't exist!
     sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;",)
         .execute(&app.db_connection_pool)
         .await
         .unwrap();
     // Act
-    let response = app.post_subscriptions(body.into()).await;
+    let response = app.post_subscriptions(&body).await;
 
     // Assert
     assert_eq!(response.status().as_u16(), 500);

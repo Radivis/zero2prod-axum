@@ -99,6 +99,47 @@ async fn get_stored_credentials(
     Ok(row)
 }
 
+#[tracing::instrument(name = "Check if users exist", skip(pool))]
+pub async fn check_users_exist(pool: &PgPool) -> Result<bool, anyhow::Error> {
+    let count = sqlx::query!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM users
+        "#
+    )
+    .fetch_one(pool)
+    .await
+    .context("Failed to check if users exist.")?;
+    Ok(count.count.unwrap_or(0) > 0)
+}
+
+#[tracing::instrument(name = "Create admin user", skip(password, pool))]
+pub async fn create_admin_user(
+    username: String,
+    password: Secret<String>,
+    pool: &PgPool,
+) -> Result<uuid::Uuid, anyhow::Error> {
+    let user_id = uuid::Uuid::new_v4();
+    let password_hash = spawn_blocking_with_tracing(move || compute_password_hash(password))
+        .await?
+        .context("Failed to hash password")?;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO users (user_id, username, password_hash)
+        VALUES ($1, $2, $3)
+        "#,
+        user_id,
+        username,
+        password_hash.expose_secret(),
+    )
+    .execute(pool)
+    .await
+    .context("Failed to create admin user in the database.")?;
+
+    Ok(user_id)
+}
+
 fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
     let password_hash = Argon2::new(

@@ -85,6 +85,8 @@ jobs:
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
 
       - name: Run tests with nextest
+        env:
+          RUST_BACKTRACE: "1"
         run: cargo nextest run --profile ci --no-fail-fast  # --no-fail-fast for full coverage
 
       - name: Upload test results (on failure)
