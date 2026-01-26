@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:headed": "HEADED=true playwright test",
+    "test:e2e:sequential": "E2E_SEQUENTIAL=true playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug"
   },

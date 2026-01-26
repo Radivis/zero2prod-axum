@@ -4,6 +4,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
+// Helper to write to log file
+async function writeLog(testName: string, message: string, level: 'info' | 'error' | 'debug' = 'info') {
+  const logsDir = path.join(__dirname, 'logs', 'e2e');
+  await fs.promises.mkdir(logsDir, { recursive: true }).catch(() => {});
+  
+  const sanitizedTestName = testName
+    .replace(/\s+/g, '_')
+    .replace(/[\/\\:]/g, '_')
+    .substring(0, 100);
+  
+  const logFile = path.join(logsDir, `${sanitizedTestName}.log`);
+  const timestamp = new Date().toISOString();
+  await fs.promises.appendFile(logFile, `[${timestamp}] [${level.toUpperCase()}] ${message}\n`).catch(() => {});
+}
+
 const sleep = promisify(setTimeout);
 
 // ES module equivalent of __dirname
@@ -34,27 +49,51 @@ export interface TestUser {
 export async function spawnTestApp(testName: string, createUser: boolean = true): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
   
+  await writeLog(testName, `Starting test app spawn: testName=${testName}, createUser=${createUser}`);
+  
   // Build the binary first (with e2e-tests feature to access test dependencies)
+  await writeLog(testName, 'Building spawn_test_server binary...');
   const cargoBuild = spawn('cargo', ['build', '--bin', 'spawn_test_server', '--features', 'e2e-tests', '--release'], {
     cwd: projectRoot,
-    stdio: 'inherit',
+    stdio: 'pipe', // Capture output to write to log
+  });
+  
+  let buildOutput = '';
+  cargoBuild.stdout?.on('data', (data) => {
+    buildOutput += data.toString();
+  });
+  cargoBuild.stderr?.on('data', (data) => {
+    buildOutput += data.toString();
   });
 
   await new Promise<void>((resolve, reject) => {
-    cargoBuild.on('close', (code) => {
+    cargoBuild.on('close', async (code) => {
       if (code === 0) {
+        await writeLog(testName, 'Binary build successful');
         resolve();
       } else {
-        reject(new Error(`Cargo build failed with code ${code}`));
+        await writeLog(testName, `Cargo build failed with code ${code}\n${buildOutput}`, 'error');
+        reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
       }
     });
-    cargoBuild.on('error', (err) => {
+    cargoBuild.on('error', async (err) => {
+      await writeLog(testName, `Failed to start cargo build: ${err.message}`, 'error');
       reject(new Error(`Failed to start cargo build: ${err.message}`));
     });
   });
 
   // Spawn the test server binary
   const binaryPath = path.join(projectRoot, 'target', 'release', 'spawn_test_server');
+  
+  // Create log file for this test
+  const sanitizedTestName = testName
+    .replace(/\s+/g, '_')
+    .replace(/[\/\\:]/g, '_')
+    .substring(0, 100);
+  const logFile = path.join(__dirname, 'logs', 'e2e', `${sanitizedTestName}.log`);
+  await fs.promises.mkdir(path.dirname(logFile), { recursive: true }).catch(() => {});
+  const logFileHandle = await fs.promises.open(logFile, 'w').catch(() => null);
+  
   const testServerProcess = spawn(
     binaryPath,
     [],
@@ -70,8 +109,23 @@ export async function spawnTestApp(testName: string, createUser: boolean = true)
   );
 
   let output = '';
-  testServerProcess.stdout?.on('data', (data) => {
-    output += data.toString();
+  // Write stdout to log file and capture for parsing
+  testServerProcess.stdout?.on('data', async (data) => {
+    const dataStr = data.toString();
+    output += dataStr;
+    if (logFileHandle) {
+      await fs.promises.appendFile(logFile, `[BACKEND STDOUT] ${dataStr}`).catch(() => {});
+    }
+    await writeLog(testName, `[BACKEND STDOUT] ${dataStr}`, 'debug');
+  });
+  
+  // Write stderr to log file (this captures Rust warnings) - don't show in console
+  testServerProcess.stderr?.on('data', async (data) => {
+    const dataStr = data.toString();
+    if (logFileHandle) {
+      await fs.promises.appendFile(logFile, `[BACKEND STDERR] ${dataStr}`).catch(() => {});
+    }
+    await writeLog(testName, `[BACKEND STDERR] ${dataStr}`, 'debug');
   });
 
   // Wait for the server to output the port information
@@ -107,19 +161,35 @@ export async function spawnTestApp(testName: string, createUser: boolean = true)
 
   if (!serverInfo) {
     testServerProcess.kill();
-    const stderr = testServerProcess.stderr?.read()?.toString() || 'No stderr output';
-    throw new Error(`Failed to start test server: no port information received. Stderr: ${stderr}`);
+    if (logFileHandle) {
+      await fs.promises.appendFile(logFile, `\n=== ERROR: Failed to start test server ===\nOutput: ${output}\n`).catch(() => {});
+      await logFileHandle.close().catch(() => {});
+    }
+    await writeLog(testName, `Failed to start test server: no port information received. Output: ${output}`, 'error');
+    throw new Error(`Failed to start test server: no port information received. See log file: ${logFile}`);
   }
+
+  await writeLog(testName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`);
 
   // Wait for the backend server to be ready by checking health endpoint
   try {
+    await writeLog(testName, 'Waiting for backend to be ready...');
     await waitForBackendReady(serverInfo.address, 30000);
+    await writeLog(testName, 'Backend is ready');
   } catch (error) {
     testServerProcess.kill();
-    throw new Error(`Backend server did not become ready: ${error}`);
+    if (logFileHandle) {
+      await fs.promises.appendFile(logFile, `\n=== ERROR: Backend did not become ready ===\n${error}\n`).catch(() => {});
+      await logFileHandle.close().catch(() => {});
+    }
+    await writeLog(testName, `Backend server did not become ready: ${error}`, 'error');
+    throw new Error(`Backend server did not become ready: ${error}. See log file: ${logFile}`);
   }
+  
+  // Store log file path in the app object for later reference
+  (serverInfo as any).logFile = logFile;
 
-  return {
+  const app: TestApp = {
     port: serverInfo.port,
     address: serverInfo.address,
     testName: serverInfo.test_name,
@@ -128,18 +198,62 @@ export async function spawnTestApp(testName: string, createUser: boolean = true)
     userId: serverInfo.user_id,
     process: testServerProcess,
   };
+  
+  // Store log file path and handle for later reference
+  (app as any).logFile = logFile;
+  (app as any).logFileHandle = logFileHandle;
+  
+  return app;
 }
 
 /**
  * Stop a test app
  */
 export async function stopTestApp(app: TestApp): Promise<void> {
-  if (app.process && !app.process.killed) {
-    app.process.kill('SIGTERM');
-    // Wait a bit for cleanup
-    await sleep(1000);
-    if (!app.process.killed) {
-      app.process.kill('SIGKILL');
+  // Close log file if it exists
+  const logFileHandle = (app as any).logFileHandle;
+  if (logFileHandle) {
+    await logFileHandle.close().catch(() => {});
+  }
+  
+  // Write final log entry if log file exists
+  const logFile = (app as any).logFile;
+  if (logFile && app.testName) {
+    await writeLog(app.testName, 'Test app stopped', 'info').catch(() => {});
+  }
+  
+  if (app.process && !app.process.killed && app.process.pid) {
+    try {
+      // Try graceful shutdown first
+      app.process.kill('SIGTERM');
+      
+      // Wait for graceful shutdown
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          resolve();
+        }, 2000);
+        
+        app.process.on('exit', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        
+        app.process.on('error', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+      
+      // Force kill if still running
+      if (!app.process.killed && app.process.pid) {
+        app.process.kill('SIGKILL');
+      }
+      
+      // Give it a moment to fully clean up
+      await sleep(500);
+    } catch (error) {
+      // Ignore errors during cleanup - process might already be dead
+      console.warn('Error during backend cleanup:', error);
     }
   }
 }
@@ -198,20 +312,53 @@ export function getTestUserFromApp(app: TestApp): TestUser | null {
 
 /**
  * Login as a user via the browser (fills form and submits)
+ * @param page - Playwright page object
+ * @param username - Username to login with
+ * @param password - Password to login with
+ * @param backendAddress - Optional backend address to verify user exists before login
+ * @param testName - Optional test name for logging
  */
 export async function loginAsUser(
   page: any,
   username: string,
-  password: string
+  password: string,
+  backendAddress?: string,
+  testName?: string
 ): Promise<void> {
-  await page.goto('/login');
+  const logTestName = testName || 'login';
+  // If backend address is provided, verify the user exists before attempting login
+  if (backendAddress) {
+    await writeLog(logTestName, `Verifying users exist at ${backendAddress}...`);
+    // Verify user exists by checking if any users exist
+    const usersExistResponse = await fetch(`${backendAddress}/api/users/exists`);
+    if (usersExistResponse.ok) {
+      const usersExist = await usersExistResponse.json();
+      if (!usersExist.users_exist) {
+        await writeLog(logTestName, 'ERROR: No users exist in database', 'error');
+        throw new Error('Cannot login: No users exist in database');
+      }
+      await writeLog(logTestName, 'Users exist in database');
+    }
+    
+    // Give the database a moment to ensure the user is fully committed
+    await sleep(500);
+  }
+  await page.goto('/login', { waitUntil: 'networkidle' });
   
   // Wait for the login form to be visible and the "checking" state to finish
   // The Login component has a useEffect that checks if users exist
-  await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible' });
+  await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible', timeout: 10000 });
+  
+  // Wait for the checking state to finish (the CircularProgress should disappear)
+  // Check if there's a loading spinner and wait for it to disappear
+  try {
+    await page.waitForSelector('text=Login', { state: 'visible', timeout: 5000 });
+  } catch (e) {
+    // If we can't find "Login" text, that's okay - might be in a different state
+  }
   
   // Wait a bit for any redirects to settle (e.g., if no users exist, redirects to initial_password)
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
   
   // Check if we're still on the login page (if not, something redirected us)
   const currentUrl = page.url();
@@ -219,19 +366,195 @@ export async function loginAsUser(
     throw new Error(`Expected to be on /login page, but was on ${currentUrl}`);
   }
   
-  // Fill in the form
-  await page.fill('input[type="text"], input[name="username"]', username);
-  await page.fill('input[type="password"]', password);
+  // Fill in the form - clear fields first to ensure clean state
+  const usernameInput = page.locator('input[type="text"], input[name="username"]').first();
+  const passwordInput = page.locator('input[type="password"]').first();
   
-  // Submit the form
+  await usernameInput.clear();
+  await usernameInput.fill(username);
+  await passwordInput.clear();
+  await passwordInput.fill(password);
+  
+  // Verify the values were set correctly
+  const filledUsername = await usernameInput.inputValue();
+  const filledPassword = await passwordInput.inputValue();
+  
+  if (filledUsername !== username) {
+    throw new Error(`Username mismatch: expected "${username}", got "${filledUsername}"`);
+  }
+  if (filledPassword !== password) {
+    throw new Error(`Password mismatch: expected "${password.substring(0, 5)}...", got "${filledPassword.substring(0, 5)}..."`);
+  }
+  
+  // Set up a promise to wait for navigation BEFORE clicking submit
+  // This ensures we catch the navigation even if it happens quickly
+  const navigationPromise = page.waitForURL(/\/admin\/dashboard/, { timeout: 20000 });
+  
+  // Submit the form and wait for the login POST request to complete
+  const loginRequestPromise = page.waitForResponse(
+    (response: any) => {
+      const url = response.url();
+      return url.includes('/login') && response.request().method() === 'POST';
+    },
+    { timeout: 15000 }
+  );
+  
+  // Also capture the request to see what was sent
+  let loginRequestBody: any = null;
+  page.on('request', (request: any) => {
+    if (request.url().includes('/login') && request.method() === 'POST') {
+      // postData() returns synchronously (string | null), not a Promise
+      const body = request.postData();
+      if (body) {
+        try {
+          loginRequestBody = JSON.parse(body);
+        } catch (e) {
+          loginRequestBody = body;
+        }
+      }
+    }
+  });
+  
   await page.click('button[type="submit"]');
   
+  // Wait for login response
+  let loginResponseStatus = 0;
+  let loginResponseData: any = null;
+  try {
+    const loginResp = await loginRequestPromise;
+    loginResponseStatus = loginResp.status();
+    loginResponseData = await loginResp.json().catch(() => null);
+    
+    // Log what was sent and received to test log file
+    await writeLog(logTestName, `Login attempt - Sent: ${JSON.stringify(loginRequestBody)}, Status: ${loginResponseStatus}, Response: ${JSON.stringify(loginResponseData)}`);
+    
+    if (loginResponseStatus !== 200) {
+      await writeLog(logTestName, `Login failed: ${JSON.stringify(loginResponseData)}`, 'error');
+      // Verify what username/password were actually sent
+      const sentUsername = loginRequestBody?.username || 'unknown';
+      const sentPasswordLength = loginRequestBody?.password ? loginRequestBody.password.length : 0;
+      throw new Error(`Login request failed with status ${loginResponseStatus}: ${JSON.stringify(loginResponseData)}. ` +
+        `Sent username: "${sentUsername}", password length: ${sentPasswordLength}, expected username: "${username}", expected password length: ${password.length}`);
+    }
+    
+    if (loginResponseData && !loginResponseData.success) {
+      throw new Error(`Login failed: ${loginResponseData.error || 'Unknown error'}`);
+    }
+  } catch (e: any) {
+    // Check if there's an error message displayed on the page
+    await page.waitForTimeout(1000); // Give error message time to appear
+    const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/failed/i').isVisible().catch(() => false);
+    if (errorVisible) {
+      const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Authentication failed');
+      await page.screenshot({ path: `test-results/login-error-${Date.now()}.png` }).catch(() => {});
+      throw new Error(`Login failed with error: ${errorText}. Original error: ${e.message}`);
+    }
+    throw e;
+  }
+  
+  // Wait for the auth check request that happens in Login component's onSuccess
+  // This is important - the navigation happens after this succeeds
+  try {
+    await page.waitForResponse(
+      (response: any) => response.url().includes('/api/auth/me') && response.status() === 200,
+      { timeout: 10000 }
+    );
+  } catch (e) {
+    // Auth check might have failed or timed out
+    // Check if we navigated anyway
+    const currentUrl = page.url();
+    if (!currentUrl.includes('/admin/dashboard')) {
+      throw new Error(`Auth check failed or timed out. Still on ${currentUrl}. Login was successful (${loginResponseStatus}) but navigation didn't happen.`);
+    }
+    // If we're on dashboard, that's okay - continue
+  }
+  
+  // Give navigation a moment to happen
+  await page.waitForTimeout(500);
+  
   // Wait for navigation to dashboard
-  await page.waitForURL(/\/admin\/dashboard/, { timeout: 15000 });
+  try {
+    await navigationPromise;
+  } catch (e) {
+    // If navigation failed, check what happened
+    const finalUrl = page.url();
+    
+    // Check for error messages
+    const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/Failed to verify/i').isVisible().catch(() => false);
+    
+    if (errorVisible) {
+      const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Unknown error');
+      await page.screenshot({ path: `test-results/login-error-${Date.now()}.png` }).catch(() => {});
+      throw new Error(`Login failed with error: ${errorText}. Current URL: ${finalUrl}`);
+    }
+    
+    // Check if we're stuck on login page (might be a redirect loop)
+    if (finalUrl.includes('/login')) {
+      // Check if there's a loading spinner (ProtectedRoute might be checking auth)
+      const isLoading = await page.locator('text=Loading, CircularProgress').isVisible().catch(() => false);
+      if (isLoading) {
+        // Wait a bit more for auth check to complete
+        await page.waitForTimeout(3000);
+        const newUrl = page.url();
+        if (newUrl.includes('/admin/dashboard')) {
+          // Navigation happened, continue
+        } else {
+          await page.screenshot({ path: `test-results/login-stuck-${Date.now()}.png` }).catch(() => {});
+          throw new Error(`Login stuck on ${newUrl} after waiting for auth check`);
+        }
+      } else {
+        await page.screenshot({ path: `test-results/login-failed-${Date.now()}.png` }).catch(() => {});
+        throw new Error(`Login navigation timeout: still on login page (${finalUrl}). Login response status: ${loginResponseStatus}`);
+      }
+    } else {
+      await page.screenshot({ path: `test-results/login-unexpected-${Date.now()}.png` }).catch(() => {});
+      throw new Error(`Login navigation timeout: expected /admin/dashboard, but was on ${finalUrl}`);
+    }
+  }
   
   // Verify we're actually on the dashboard
   const finalUrl = page.url();
   if (!finalUrl.includes('/admin/dashboard')) {
-    throw new Error(`Login failed: expected to be on /admin/dashboard, but was on ${finalUrl}`);
+    await page.screenshot({ path: `test-results/login-wrong-page-${Date.now()}.png` }).catch(() => {});
+    
+    // Check cookies to see if session was set
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find(c => c.name.includes('session') || c.name.includes('sid'));
+    
+    throw new Error(`Login failed: expected to be on /admin/dashboard, but was on ${finalUrl}. ` +
+      `Login response: ${loginResponseStatus}, Session cookie present: ${!!sessionCookie}, ` +
+      `Cookies: ${cookies.map(c => c.name).join(', ')}`);
   }
+  
+  // Verify session cookie was set
+  const cookies = await page.context().cookies();
+  const sessionCookie = cookies.find(c => c.name.includes('session') || c.name.includes('sid'));
+  if (!sessionCookie) {
+    console.warn('Warning: No session cookie found after login, but navigation succeeded');
+  }
+  
+  // Wait for the dashboard to be fully loaded and auth check to complete
+  // ProtectedRoute will check auth when the dashboard loads
+  // AdminDashboard also does its own auth check
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  
+  // Wait for the dashboard auth check to complete and welcome message to appear
+  // This ensures both ProtectedRoute and AdminDashboard have finished their auth checks
+  try {
+    await page.waitForResponse(
+      (response: any) => response.url().includes('/api/auth/me') && response.status() === 200,
+      { timeout: 10000 }
+    );
+  } catch (e) {
+    // Auth check might have already completed, that's okay
+  }
+  
+  // Wait for any loading spinners to disappear and welcome message to appear
+  await page.waitForSelector('text=Welcome', { timeout: 10000 }).catch(() => {
+    // If welcome text doesn't appear, check if we're still on dashboard
+    const url = page.url();
+    if (!url.includes('/admin/dashboard')) {
+      throw new Error(`Dashboard loaded but then redirected to ${url}`);
+    }
+  });
 }

@@ -5,16 +5,21 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* Run tests in parallel by default, but allow sequential mode via E2E_SEQUENTIAL=true */
+  /* Sequential mode avoids file descriptor exhaustion when many Vite servers run simultaneously */
+  fullyParallel: process.env.E2E_SEQUENTIAL !== 'true',
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Use sequential mode (workers: 1) if E2E_SEQUENTIAL is set, otherwise use default (parallel) */
+  workers: process.env.E2E_SEQUENTIAL === 'true' ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [
+    ['html'],
+    ['list'], // Console output
+    ['./tests/reporter.ts'], // Custom file reporter
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */

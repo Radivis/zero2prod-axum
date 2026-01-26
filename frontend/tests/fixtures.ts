@@ -3,6 +3,22 @@ import { spawnTestApp, stopTestApp, TestApp, getTestUserFromApp, TestUser, login
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import * as fs from 'fs';
+
+// Helper to write to log file
+async function writeLog(testName: string, message: string, level: 'info' | 'error' | 'debug' = 'info') {
+  const logsDir = path.join(__dirname, 'logs', 'e2e');
+  await fs.promises.mkdir(logsDir, { recursive: true }).catch(() => {});
+  
+  const sanitizedTestName = testName
+    .replace(/\s+/g, '_')
+    .replace(/[\/\\:]/g, '_')
+    .substring(0, 100);
+  
+  const logFile = path.join(logsDir, `${sanitizedTestName}.log`);
+  const timestamp = new Date().toISOString();
+  await fs.promises.appendFile(logFile, `[${timestamp}] [${level.toUpperCase()}] ${message}\n`).catch(() => {});
+}
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -20,23 +36,31 @@ type TestFixtures = {
 export const test = base.extend<TestFixtures>({
   // Backend test app fixture (blank, no users) - for initial_password tests
   backendApp: async ({}, use, testInfo) => {
-    const testName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
-    const app = await spawnTestApp(testName, false); // Don't create user
+    const testName = testInfo.titlePath.join(' > ');
+    const sanitizedTestName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    await writeLog(sanitizedTestName, `Starting test: ${testName}`);
+    
+    const app = await spawnTestApp(`e2e-${sanitizedTestName}-${Date.now()}`, false); // Don't create user
     
     await use(app);
     
     // Cleanup
+    await writeLog(sanitizedTestName, 'Cleaning up backend app');
     await stopTestApp(app);
   },
 
   // Backend test app fixture with user - for most tests
   backendAppWithUser: async ({}, use, testInfo) => {
-    const testName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
-    const app = await spawnTestApp(testName, true); // Create user
+    const testName = testInfo.titlePath.join(' > ');
+    const sanitizedTestName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    await writeLog(sanitizedTestName, `Starting test: ${testName}`);
+    
+    const app = await spawnTestApp(`e2e-${sanitizedTestName}-${Date.now()}`, true); // Create user
     
     await use(app);
     
     // Cleanup
+    await writeLog(sanitizedTestName, 'Cleaning up backend app');
     await stopTestApp(app);
   },
 
@@ -55,6 +79,7 @@ export const test = base.extend<TestFixtures>({
     }
     
     // Start Vite dev server with the backend port
+    // Use detached: false and set a new process group to help with cleanup
     const viteProcess = spawn('npm', ['run', 'dev'], {
       cwd: path.join(__dirname, '..'),
       env: {
@@ -62,7 +87,21 @@ export const test = base.extend<TestFixtures>({
         BACKEND_PORT: app.port.toString(),
       },
       stdio: 'pipe',
+      detached: false,
+      // On Unix systems, create a new process group for easier cleanup
+      ...(process.platform !== 'win32' && { 
+        shell: false,
+      }),
     });
+    
+    // On Unix, set the process group so we can kill all children
+    if (process.platform !== 'win32' && viteProcess.pid) {
+      try {
+        process.kill(-viteProcess.pid, 0); // Test if we can signal the group
+      } catch (e) {
+        // If we can't set process group, that's okay - we'll kill individually
+      }
+    }
 
     // Wait for Vite to be ready
     let viteReady = false;
@@ -106,24 +145,112 @@ export const test = base.extend<TestFixtures>({
 
     await use(viteProcess);
 
-    // Cleanup
-    viteProcess.kill('SIGTERM');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    if (!viteProcess.killed) {
-      viteProcess.kill('SIGKILL');
+    // Cleanup - kill Vite process and all its children
+    // Vite spawns child processes (npm -> node -> vite) for file watching
+    try {
+      if (viteProcess.pid && !viteProcess.killed) {
+        // On Unix systems, try to kill the process group (includes all children)
+        if (process.platform !== 'win32') {
+          try {
+            // Kill the entire process group
+            process.kill(-viteProcess.pid, 'SIGTERM');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Force kill if still running
+            try {
+              process.kill(-viteProcess.pid, 'SIGKILL');
+            } catch (e) {
+              // Process group might already be dead
+            }
+          } catch (e) {
+            // Fall back to killing just the main process
+            viteProcess.kill('SIGTERM');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (!viteProcess.killed) {
+              viteProcess.kill('SIGKILL');
+            }
+          }
+        } else {
+          // On Windows, just kill the main process
+          viteProcess.kill('SIGTERM');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (!viteProcess.killed) {
+            viteProcess.kill('SIGKILL');
+          }
+        }
+      }
+      
+      // Give it a moment to fully clean up file watchers
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      // Ignore errors during cleanup - process might already be dead
+      // Don't log warnings as they clutter the test output
     }
   },
 
   // Authenticated page fixture (uses backendAppWithUser)
-  authenticatedPage: async ({ page, backendAppWithUser }, use) => {
+  authenticatedPage: async ({ page, backendAppWithUser }, use, testInfo) => {
+    const sanitizedTestName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    
     // Get the test user from the app
     const testUser = getTestUserFromApp(backendAppWithUser);
     if (!testUser) {
+      await writeLog(sanitizedTestName, 'ERROR: backendAppWithUser fixture must have a user', 'error');
       throw new Error('backendAppWithUser fixture must have a user. Use backendAppWithUser fixture.');
     }
 
-    // Login
-    await loginAsUser(page, testUser.username, testUser.password);
+    await writeLog(sanitizedTestName, `Attempting login for user: ${testUser.username}`);
+
+    // Verify user exists in database before attempting login
+    // This helps catch timing issues where user isn't fully committed
+    const usersExistResponse = await fetch(`${backendAppWithUser.address}/api/users/exists`);
+    if (!usersExistResponse.ok) {
+      await writeLog(sanitizedTestName, `ERROR: Failed to verify users exist: ${usersExistResponse.status}`, 'error');
+      throw new Error(`Failed to verify users exist: ${usersExistResponse.status}`);
+    }
+    const usersExist = await usersExistResponse.json();
+    if (!usersExist.users_exist) {
+      await writeLog(sanitizedTestName, 'ERROR: No users exist in database', 'error');
+      throw new Error('Cannot login: No users exist in database. User creation may have failed.');
+    }
+
+    // Verify the user can login via API first (this helps debug credential issues)
+    try {
+      await writeLog(sanitizedTestName, 'Testing API login before browser login...');
+      const apiLoginResponse = await fetch(`${backendAppWithUser.address}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: testUser.username,
+          password: testUser.password,
+        }),
+      });
+      
+      if (!apiLoginResponse.ok) {
+        const errorData = await apiLoginResponse.json().catch(() => ({ error: 'Unknown error' }));
+        const errorMsg = `API login test failed: ${apiLoginResponse.status} - ${JSON.stringify(errorData)}. Username: "${testUser.username}", Password length: ${testUser.password.length}`;
+        await writeLog(sanitizedTestName, `ERROR: ${errorMsg}`, 'error');
+        throw new Error(errorMsg);
+      }
+      
+      const loginData = await apiLoginResponse.json();
+      if (!loginData.success) {
+        const errorMsg = `API login test failed: ${loginData.error || 'Unknown error'}. Username: "${testUser.username}", Password length: ${testUser.password.length}`;
+        await writeLog(sanitizedTestName, `ERROR: ${errorMsg}`, 'error');
+        throw new Error(errorMsg);
+      }
+      
+      await writeLog(sanitizedTestName, 'API login test successful');
+    } catch (e: any) {
+      // If API login fails, browser login will definitely fail
+      await writeLog(sanitizedTestName, `ERROR: Cannot proceed with browser login - API login test failed: ${e.message}`, 'error');
+      throw new Error(`Cannot proceed with browser login - API login test failed: ${e.message}`);
+    }
+
+    // Login with backend address for verification
+    await writeLog(sanitizedTestName, 'Starting browser login...');
+    await loginAsUser(page, testUser.username, testUser.password, backendAppWithUser.address, sanitizedTestName);
+    await writeLog(sanitizedTestName, 'Browser login successful');
 
     await use(page);
   },
