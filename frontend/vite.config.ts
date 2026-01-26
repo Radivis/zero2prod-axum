@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Get backend port from environment variable, default to 8000
+const backendPort = process.env.BACKEND_PORT || '8000';
+const backendUrl = `http://127.0.0.1:${backendPort}`;
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -10,15 +14,15 @@ export default defineConfig({
       // Proxy API endpoints and POST requests to backend
       // Use 127.0.0.1 instead of localhost to force IPv4
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/health_check': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/login': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
         // Only proxy POST requests, let Vite serve GET (React app)
         bypass(req) {
@@ -28,7 +32,7 @@ export default defineConfig({
         },
       },
       '/initial_password': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
         bypass(req) {
           if (req.method === 'GET') {
@@ -37,11 +41,11 @@ export default defineConfig({
         },
       },
       '/subscriptions': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/admin': {
-        target: 'http://127.0.0.1:8000',
+        target: backendUrl,
         changeOrigin: true,
         // Only proxy POST requests, let Vite serve GET (React app)
         bypass(req) {
