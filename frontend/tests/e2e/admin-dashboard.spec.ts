@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Admin Dashboard', () => {
-  test('protected route redirects to login when not authenticated', async ({ page, backendApp, frontendServer }) => {
+  test('protected route redirects to login when not authenticated', async ({ page, backendAppWithUser, frontendServer }) => {
     // Try to access admin dashboard without logging in
     await page.goto('/admin/dashboard');
     
@@ -10,14 +10,14 @@ test.describe('Admin Dashboard', () => {
     expect(page.url()).toContain('/login');
   });
 
-  test('dashboard displays username after login', async ({ page, backendApp, frontendServer, authenticatedPage }) => {
+  test('dashboard displays username after login', async ({ page, backendAppWithUser, frontendServer, authenticatedPage, testUser }) => {
     // authenticatedPage fixture already logs us in
     await page.goto('/admin/dashboard');
     
     // Should see welcome message with username
     await expect(page.locator('text=/Welcome/i')).toBeVisible();
-    // The username should be displayed (usually "admin" for initial user)
-    await expect(page.locator('text=/admin/i')).toBeVisible({ timeout: 5000 });
+    // The username should be displayed
+    await expect(page.locator(`text=${testUser.username}`)).toBeVisible({ timeout: 5000 });
   });
 
   test('logout functionality works', async ({ page, backendApp, frontendServer, authenticatedPage }) => {

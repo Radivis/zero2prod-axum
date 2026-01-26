@@ -15,17 +15,23 @@ export interface TestApp {
   address: string;
   testName: string;
   process: ChildProcess;
+  username?: string;
+  password?: string;
+  userId?: string;
 }
 
 export interface TestUser {
   username: string;
   password: string;
+  userId?: string;
 }
 
 /**
  * Spawn a backend test server
+ * @param testName - Name for the test
+ * @param createUser - Whether to create a test user (default: true)
  */
-export async function spawnTestApp(testName: string): Promise<TestApp> {
+export async function spawnTestApp(testName: string, createUser: boolean = true): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
   
   // Build the binary first (with e2e-tests feature to access test dependencies)
@@ -57,6 +63,7 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
       env: {
         ...process.env,
         TEST_NAME: testName,
+        CREATE_USER: createUser ? 'true' : 'false',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     }
@@ -68,7 +75,14 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
   });
 
   // Wait for the server to output the port information
-  let serverInfo: { port: number; address: string; test_name: string } | null = null;
+  let serverInfo: {
+    port: number;
+    address: string;
+    test_name: string;
+    username?: string;
+    password?: string;
+    user_id?: string;
+  } | null = null;
   const maxWait = 30000; // 30 seconds
   const startTime = Date.now();
 
@@ -93,16 +107,25 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
 
   if (!serverInfo) {
     testServerProcess.kill();
-    throw new Error('Failed to start test server: no port information received');
+    const stderr = testServerProcess.stderr?.read()?.toString() || 'No stderr output';
+    throw new Error(`Failed to start test server: no port information received. Stderr: ${stderr}`);
   }
 
-  // Wait a bit more for the server to be ready
-  await sleep(2000);
+  // Wait for the backend server to be ready by checking health endpoint
+  try {
+    await waitForBackendReady(serverInfo.address, 30000);
+  } catch (error) {
+    testServerProcess.kill();
+    throw new Error(`Backend server did not become ready: ${error}`);
+  }
 
   return {
     port: serverInfo.port,
     address: serverInfo.address,
     testName: serverInfo.test_name,
+    username: serverInfo.username,
+    password: serverInfo.password,
+    userId: serverInfo.user_id,
     process: testServerProcess,
   };
 }
@@ -160,47 +183,17 @@ export async function waitForFrontendReady(url: string, maxWait = 30000): Promis
 }
 
 /**
- * Create a test user via API
+ * Get test user from the app (if it was created during spawn)
  */
-export async function createTestUser(
-  backendAddress: string,
-  username?: string,
-  password?: string
-): Promise<TestUser> {
-  const testUsername = username || `testuser-${Date.now()}`;
-  const testPassword = password || `testpass-${Date.now()}-123456789012`;
-
-  // First check if users exist
-  const usersExistResponse = await fetch(`${backendAddress}/api/users/exists`);
-  const usersExist = await usersExistResponse.json();
-
-  if (!usersExist.users_exist) {
-    // Create initial admin user
-    const response = await fetch(`${backendAddress}/initial_password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        password: testPassword,
-        password_confirmation: testPassword,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create initial user: ${response.statusText}`);
-    }
-
+export function getTestUserFromApp(app: TestApp): TestUser | null {
+  if (app.username && app.password) {
     return {
-      username: 'admin',
-      password: testPassword,
+      username: app.username,
+      password: app.password,
+      userId: app.userId,
     };
-  } else {
-    // For now, we'll need to create users via database or API
-    // This is a simplified version - in practice you might want to use the API
-    // or have a test helper endpoint
-    throw new Error('User creation for existing users not yet implemented in E2E tests');
   }
+  return null;
 }
 
 /**
@@ -212,10 +205,33 @@ export async function loginAsUser(
   password: string
 ): Promise<void> {
   await page.goto('/login');
-  await page.waitForSelector('input[type="text"], input[name="username"]');
+  
+  // Wait for the login form to be visible and the "checking" state to finish
+  // The Login component has a useEffect that checks if users exist
+  await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible' });
+  
+  // Wait a bit for any redirects to settle (e.g., if no users exist, redirects to initial_password)
+  await page.waitForTimeout(500);
+  
+  // Check if we're still on the login page (if not, something redirected us)
+  const currentUrl = page.url();
+  if (!currentUrl.includes('/login')) {
+    throw new Error(`Expected to be on /login page, but was on ${currentUrl}`);
+  }
+  
+  // Fill in the form
   await page.fill('input[type="text"], input[name="username"]', username);
   await page.fill('input[type="password"]', password);
+  
+  // Submit the form
   await page.click('button[type="submit"]');
-  // Wait for navigation or success
-  await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
+  
+  // Wait for navigation to dashboard
+  await page.waitForURL(/\/admin\/dashboard/, { timeout: 15000 });
+  
+  // Verify we're actually on the dashboard
+  const finalUrl = page.url();
+  if (!finalUrl.includes('/admin/dashboard')) {
+    throw new Error(`Login failed: expected to be on /admin/dashboard, but was on ${finalUrl}`);
+  }
 }

@@ -8,3 +8,4 @@ lcov.info
 /target/
 /tests/logs/
 /frontend/test-results/
+/frontend/playwright-report/

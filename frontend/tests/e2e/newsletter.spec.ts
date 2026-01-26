@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Newsletter', () => {
-  test('newsletter form submission requires authentication', async ({ page, backendApp, frontendServer }) => {
+  test('newsletter form submission requires authentication', async ({ page, backendAppWithUser, frontendServer }) => {
     // Try to access newsletter page without authentication
     await page.goto('/admin/newsletters');
     

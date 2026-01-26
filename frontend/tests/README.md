@@ -23,10 +23,16 @@ This directory contains end-to-end tests for the React frontend using Playwright
 
 ## Running Tests
 
-### Run all E2E tests:
+### Run all E2E tests (headless):
 ```bash
 cd frontend
 npm run test:e2e
+```
+
+### Run tests with visible browser (headed mode):
+```bash
+cd frontend
+npm run test:e2e:headed
 ```
 
 ### Run tests in UI mode (interactive):
@@ -35,7 +41,7 @@ cd frontend
 npm run test:e2e:ui
 ```
 
-### Run tests in debug mode:
+### Run tests in debug mode (headed + step through):
 ```bash
 cd frontend
 npm run test:e2e:debug

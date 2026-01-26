@@ -21,6 +21,10 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    /* Run in headed mode if HEADED environment variable is set */
+    headless: process.env.HEADED !== 'true',
+    /* Slow down operations to make them easier to follow */
+    ...(process.env.HEADED === 'true' && { launchOptions: { slowMo: 100 } }),
   },
 
   /* Configure projects for major browsers */

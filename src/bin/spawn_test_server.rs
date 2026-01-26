@@ -10,7 +10,7 @@ mod helpers {
 }
 
 #[cfg(feature = "e2e-tests")]
-use helpers::spawn_app;
+use helpers::{spawn_app, spawn_app_container_with_user};
 #[cfg(feature = "e2e-tests")]
 use std::io::{self, Write};
 
@@ -21,15 +21,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_name =
         std::env::var("TEST_NAME").unwrap_or_else(|_| format!("e2e-{}", uuid::Uuid::new_v4()));
 
-    // Spawn the test app
-    let app = spawn_app(&test_name).await;
+    // Check if we should create a user (default: true)
+    let create_user = std::env::var("CREATE_USER")
+        .unwrap_or_else(|_| "true".to_string())
+        .parse::<bool>()
+        .unwrap_or(true);
 
-    // Output the port and address as JSON to stdout
-    let output = serde_json::json!({
-        "port": app.port,
-        "address": app.address,
+    // Spawn the test app with or without a user
+    let (address, port, user_info) = if create_user {
+        let container = spawn_app_container_with_user(&test_name).await;
+        let address = container.app.address.clone();
+        let port = container.app.port;
+
+        // Wait for the server to be ready
+        let client = reqwest::Client::new();
+        let mut attempts = 0;
+        let max_attempts = 30;
+        while attempts < max_attempts {
+            match client.get(format!("{}/health_check", address)).send().await {
+                Ok(response) if response.status().is_success() => break,
+                _ => {
+                    attempts += 1;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+        if attempts >= max_attempts {
+            eprintln!(
+                "Warning: Server may not be ready after {} attempts",
+                max_attempts
+            );
+        }
+
+        let user_info = Some(serde_json::json!({
+            "username": container.test_user.username,
+            "password": container.test_user.password,
+            "user_id": container.test_user.user_id.to_string()
+        }));
+        (address, port, user_info)
+    } else {
+        let app = spawn_app(&test_name).await;
+        let address = app.address.clone();
+        let port = app.port;
+
+        // Wait for the server to be ready
+        let client = reqwest::Client::new();
+        let mut attempts = 0;
+        let max_attempts = 30;
+        while attempts < max_attempts {
+            match client.get(format!("{}/health_check", address)).send().await {
+                Ok(response) if response.status().is_success() => break,
+                _ => {
+                    attempts += 1;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+        if attempts >= max_attempts {
+            eprintln!(
+                "Warning: Server may not be ready after {} attempts",
+                max_attempts
+            );
+        }
+
+        (address, port, None)
+    };
+
+    let mut output = serde_json::json!({
+        "port": port,
+        "address": address,
         "test_name": test_name
     });
+
+    if let Some(user) = user_info {
+        output["username"] = user["username"].clone();
+        output["password"] = user["password"].clone();
+        output["user_id"] = user["user_id"].clone();
+    }
 
     println!("{}", serde_json::to_string(&output)?);
     io::stdout().flush()?;
