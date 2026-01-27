@@ -13,13 +13,14 @@ import {
 import { apiRequest } from '../api/client'
 
 function InitialPassword() {
+  const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const initialPasswordMutation = useMutation({
-    mutationFn: async (data: { password: string; password_confirmation: string }) => {
+    mutationFn: async (data: { username: string; password: string; password_confirmation: string }) => {
       return apiRequest('/initial_password', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -50,14 +51,14 @@ function InitialPassword() {
       return
     }
 
-    initialPasswordMutation.mutate({ password, password_confirmation: passwordConfirmation })
+    initialPasswordMutation.mutate({ username, password, password_confirmation: passwordConfirmation })
   }
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
       <Paper sx={{ p: 4, maxWidth: 500, width: '100%' }}>
         <Alert severity="error" sx={{ mb: 3, fontWeight: 'bold' }}>
-          ⚠️ WARNING: Store this password immediately! There is no easy way to reset it if lost!
+          ⚠️ WARNING: Store username and password immediately! There is no easy way to reset them if lost!
         </Alert>
         <Typography variant="h5" component="h1" gutterBottom>
           Set Initial Admin Password
@@ -71,6 +72,15 @@ function InitialPassword() {
           </Alert>
         )}
         <form onSubmit={handleSubmit}>
+          <TextField
+              fullWidth
+              label="Username of admin user"
+              placeholder="Enter Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              margin="normal"
+              required
+          />
           <TextField
             fullWidth
             label="Password"

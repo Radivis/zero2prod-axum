@@ -90,18 +90,17 @@ pub async fn create_initial_password(
 
     // Create admin user with provided username
     let _user_id =
-        crate::authentication::create_admin_user(form.username, form.password, &state.db)
+        crate::authentication::create_admin_user(form.username.clone(), form.password, &state.db)
             .await
             .context("Failed to create admin user")?;
 
-    // Set success flash message
-    let flash_sender = FlashMessageSender::new(session);
-    if let Err(e) = flash_sender
-        .info("Admin user created successfully. Please log in.")
-        .await
-    {
-        tracing::error!("Failed to set flash message: {:?}", e);
-    }
-
-    Ok(Redirect::to("/login"))
+    // Return JSON response for API clients
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "success": true,
+            "username": form.username.to_string(),
+            "message": "Admin user created successfully. Please log in."
+        })),
+    ))
 }

@@ -44,12 +44,14 @@ export interface TestUser {
 /**
  * Spawn a backend test server
  * @param testName - Name for the test
- * @param createUser - Whether to create a test user (default: true)
+ * 
+ * Note: Users should be created via the makeUser() helper function, not by the backend spawn.
+ * This ensures users are created through the actual /initial_password API endpoint.
  */
-export async function spawnTestApp(testName: string, createUser: boolean = true): Promise<TestApp> {
+export async function spawnTestApp(testName: string): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
   
-  await writeLog(testName, `Starting test app spawn: testName=${testName}, createUser=${createUser}`);
+  await writeLog(testName, `Starting test app spawn: testName=${testName}`);
   
   // Build the binary first (with e2e-tests feature to access test dependencies)
   await writeLog(testName, 'Building spawn_test_server binary...');
@@ -102,7 +104,7 @@ export async function spawnTestApp(testName: string, createUser: boolean = true)
       env: {
         ...process.env,
         TEST_NAME: testName,
-        CREATE_USER: createUser ? 'true' : 'false',
+        CREATE_USER: 'false', // Always false - users created via makeUser() instead
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     }
@@ -307,9 +309,6 @@ export function getTestUserFromApp(app: TestApp): TestUser | null {
       password: app.password,
       userId: app.userId,
     };
-    
-    // Log the user credentials for debugging (these are test users, so it's safe)
-    console.log(`[DEBUG] Test user extracted - Username: "${testUser.username}", Password: "${testUser.password}", UserId: ${testUser.userId}`);
     
     return testUser;
   }

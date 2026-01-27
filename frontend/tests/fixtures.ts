@@ -135,7 +135,13 @@ export const test = base.extend<TestFixtures>({
     await writeLog(sanitizedTestName, `Starting test: ${testName}`);
     
     // Always spawn without a user - tests create users via makeUser() if needed
-    const app = await spawnTestApp(`e2e-${sanitizedTestName}`, false);
+    let app: TestApp;
+    try {
+      app = await spawnTestApp(`e2e-${sanitizedTestName}`);
+    } catch (error) {
+      await writeLog(sanitizedTestName, `ERROR: Failed to spawn backend app: ${error}`, 'error');
+      throw error;
+    }
     
     await use(app);
     
