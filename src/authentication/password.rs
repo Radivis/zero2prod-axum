@@ -23,6 +23,11 @@ pub async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, AuthError> {
+    eprintln!(
+        "[AUTH DEBUG] Validating credentials for username: {}",
+        credentials.username
+    );
+
     let mut user_id = None;
     let mut expected_password_hash = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\
@@ -36,15 +41,34 @@ pub async fn validate_credentials(
             .await
             .map_err(AuthError::UnexpectedError)?
     {
+        eprintln!(
+            "[AUTH DEBUG] Found user in database: user_id={}, password_hash_len={}",
+            stored_user_id,
+            stored_password_hash.expose_secret().len()
+        );
+        eprintln!(
+            "[AUTH DEBUG] Stored password hash starts with: {}",
+            &stored_password_hash.expose_secret()
+                [..std::cmp::min(50, stored_password_hash.expose_secret().len())]
+        );
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
+    } else {
+        eprintln!("[AUTH DEBUG] User NOT found in database!");
     }
 
-    spawn_blocking_with_tracing(move || {
+    let verify_result = spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
     .await
-    .context("Failed to spawn blocking task.")??;
+    .context("Failed to spawn blocking task.")?;
+
+    match &verify_result {
+        Ok(_) => eprintln!("[AUTH DEBUG] Password verification: SUCCESS"),
+        Err(e) => eprintln!("[AUTH DEBUG] Password verification: FAILED - {:?}", e),
+    }
+
+    verify_result?;
 
     // This is only set to `Some` if we found credentials in the store
     // So, even if the default password ends up matching (somehow)
@@ -84,6 +108,42 @@ async fn get_stored_credentials(
     username: &str,
     pool: &PgPool,
 ) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
+    // Debug: Check which database we're connected to
+    let db_name_result = sqlx::query!("SELECT current_database() as db_name")
+        .fetch_one(pool)
+        .await;
+
+    match db_name_result {
+        Ok(db_info) => {
+            eprintln!(
+                "[GET_CREDS DEBUG] Connected to database: {:?}",
+                db_info.db_name
+            );
+        }
+        Err(e) => {
+            eprintln!("[GET_CREDS DEBUG] Could not get database name: {:?}", e);
+        }
+    }
+
+    // Debug: Check all users in the database
+    let all_users = sqlx::query!("SELECT username FROM users LIMIT 10")
+        .fetch_all(pool)
+        .await;
+
+    match all_users {
+        Ok(users) => {
+            eprintln!("[GET_CREDS DEBUG] Found {} users in database", users.len());
+            for user in users {
+                eprintln!("[GET_CREDS DEBUG]   - User: {}", user.username);
+            }
+        }
+        Err(e) => {
+            eprintln!("[GET_CREDS DEBUG] Error fetching users: {:?}", e);
+        }
+    }
+
+    eprintln!("[GET_CREDS DEBUG] Looking for username: {}", username);
+
     let row = sqlx::query!(
         r#"
         SELECT user_id, password_hash
@@ -160,14 +220,30 @@ fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
 ) -> Result<(), AuthError> {
+    eprintln!(
+        "[VERIFY DEBUG] Password candidate length: {}",
+        password_candidate.expose_secret().len()
+    );
+    eprintln!(
+        "[VERIFY DEBUG] Expected hash: {}",
+        expected_password_hash.expose_secret()
+    );
+
     let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")?;
 
-    Argon2::default()
+    let result = Argon2::default()
         .verify_password(
             password_candidate.expose_secret().as_bytes(),
             &expected_password_hash,
         )
         .context("Invalid password.")
-        .map_err(AuthError::InvalidCredentials)
+        .map_err(AuthError::InvalidCredentials);
+
+    match &result {
+        Ok(_) => eprintln!("[VERIFY DEBUG] Argon2 verification: SUCCESS"),
+        Err(e) => eprintln!("[VERIFY DEBUG] Argon2 verification: FAILED - {:?}", e),
+    }
+
+    result
 }

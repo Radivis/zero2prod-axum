@@ -75,6 +75,10 @@ impl Application {
     }
 
     pub async fn run_until_stopped(self, configuration: Settings) -> Result<(), std::io::Error> {
+        eprintln!(
+            "[APP DEBUG] Application connecting to database: {}",
+            configuration.database.database_name
+        );
         let connection_pool = get_connection_pool(&configuration.database);
         let email_client = configuration.email_client.client();
         let app_state = AppState {

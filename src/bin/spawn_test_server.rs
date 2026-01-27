@@ -12,6 +12,8 @@ mod helpers {
 #[cfg(feature = "e2e-tests")]
 use helpers::{spawn_app, spawn_app_container_with_user};
 #[cfg(feature = "e2e-tests")]
+use sqlx::PgPool;
+#[cfg(feature = "e2e-tests")]
 use std::io::{self, Write};
 
 #[cfg(feature = "e2e-tests")]
@@ -20,6 +22,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get test name from environment variable or use default
     let test_name =
         std::env::var("TEST_NAME").unwrap_or_else(|_| format!("e2e-{}", uuid::Uuid::new_v4()));
+
+    // Note: stderr output (including warnings from helpers.rs) will be captured
+    // by Node.js and written to the log file. We don't need to redirect it here.
+    // The tracing system from helpers.rs writes to its own log file in tests/logs/,
+    // but that's separate from the E2E test logs.
 
     // Check if we should create a user (default: true)
     let create_user = std::env::var("CREATE_USER")
@@ -32,6 +39,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let container = spawn_app_container_with_user(&test_name).await;
         let address = container.app.address.clone();
         let port = container.app.port;
+
+        // Log the user credentials for debugging (these are test users, so it's safe)
+        eprintln!(
+            "[DEBUG] Created test user - Username: \"{}\", Password: \"{}\", UserId: {}",
+            container.test_user.username, container.test_user.password, container.test_user.user_id
+        );
 
         // Wait for the server to be ready
         let client = reqwest::Client::new();
@@ -53,11 +66,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
 
+        // Additional wait to ensure user is fully committed to database
+        // The store() method awaits, but transaction commit might need a moment
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
         let user_info = Some(serde_json::json!({
             "username": container.test_user.username,
             "password": container.test_user.password,
             "user_id": container.test_user.user_id.to_string()
         }));
+
+        // Verify the user can be queried from the database before returning
+        // This ensures the transaction is committed
+        let user_check = sqlx::query!(
+            "SELECT username, password_hash FROM users WHERE user_id = $1",
+            container.test_user.user_id
+        )
+        .fetch_optional(&container.app.db_connection_pool)
+        .await;
+
+        match user_check {
+            Ok(Some(row)) => {
+                eprintln!("[DEBUG] User confirmed in database before returning");
+                eprintln!(
+                    "[DEBUG] DB username: {}, Password hash length: {}",
+                    row.username,
+                    row.password_hash.len()
+                );
+                eprintln!(
+                    "[DEBUG] Password hash starts with: {}",
+                    &row.password_hash[..std::cmp::min(50, row.password_hash.len())]
+                );
+            }
+            Ok(None) => {
+                eprintln!(
+                    "[WARNING] User not found in database immediately after creation - waiting..."
+                );
+                // Wait a bit more and check again
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                let retry_check = sqlx::query!(
+                    "SELECT username, password_hash FROM users WHERE user_id = $1",
+                    container.test_user.user_id
+                )
+                .fetch_optional(&container.app.db_connection_pool)
+                .await;
+
+                match retry_check {
+                    Ok(Some(row)) => {
+                        eprintln!("[DEBUG] User confirmed in database on retry");
+                        eprintln!(
+                            "[DEBUG] DB username: {}, Password hash length: {}",
+                            row.username,
+                            row.password_hash.len()
+                        );
+                    }
+                    Ok(None) => {
+                        eprintln!("[WARNING] User still not found in database after retry");
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Error on retry: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[WARNING] Error checking user in database: {}", e);
+            }
+        }
+
         (address, port, user_info)
     } else {
         let app = spawn_app(&test_name).await;

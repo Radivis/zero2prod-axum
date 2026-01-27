@@ -23,6 +23,7 @@ async fn create_initial_admin_when_no_users_exist() {
     let password = "test_password_123";
     let response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": password,
             "password_confirmation": password
         }))
@@ -57,6 +58,7 @@ async fn reject_initial_password_when_users_already_exist() {
     let response = container
         .app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": "test_password_123",
             "password_confirmation": "test_password_123"
         }))
@@ -84,6 +86,7 @@ async fn reject_when_passwords_do_not_match() {
     // Act - Try to create initial admin with mismatched passwords
     let response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": "test_password_123",
             "password_confirmation": "different_password_456"
         }))
@@ -111,6 +114,7 @@ async fn reject_password_too_short() {
     // Act - Try to create initial admin with password that's too short (excluding spaces)
     let response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": "0123456789 a", // 11 chars excluding space
             "password_confirmation": "0123456789 a"
         }))
@@ -139,6 +143,7 @@ async fn reject_password_too_long() {
     let long_password = "a".repeat(129); // 129 characters
     let response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": &long_password,
             "password_confirmation": &long_password
         }))
@@ -200,6 +205,7 @@ async fn can_login_after_creating_initial_admin() {
     // Act - Create initial admin
     let create_response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": password,
             "password_confirmation": password
         }))
@@ -237,6 +243,7 @@ async fn password_with_spaces_is_valid_if_non_space_chars_meet_minimum() {
     // Act - Create initial admin
     let response = app
         .post_initial_password(&serde_json::json!({
+            "username": "admin",
             "password": password,
             "password_confirmation": password
         }))

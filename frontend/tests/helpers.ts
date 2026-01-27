@@ -119,9 +119,10 @@ export async function spawnTestApp(testName: string, createUser: boolean = true)
     await writeLog(testName, `[BACKEND STDOUT] ${dataStr}`, 'debug');
   });
   
-  // Write stderr to log file (this captures Rust warnings) - don't show in console
+  // Write stderr to log file only (not console)
   testServerProcess.stderr?.on('data', async (data) => {
     const dataStr = data.toString();
+    // Write to log file only, don't clutter console
     if (logFileHandle) {
       await fs.promises.appendFile(logFile, `[BACKEND STDERR] ${dataStr}`).catch(() => {});
     }
@@ -301,11 +302,16 @@ export async function waitForFrontendReady(url: string, maxWait = 30000): Promis
  */
 export function getTestUserFromApp(app: TestApp): TestUser | null {
   if (app.username && app.password) {
-    return {
+    const testUser = {
       username: app.username,
       password: app.password,
       userId: app.userId,
     };
+    
+    // Log the user credentials for debugging (these are test users, so it's safe)
+    console.log(`[DEBUG] Test user extracted - Username: "${testUser.username}", Password: "${testUser.password}", UserId: ${testUser.userId}`);
+    
+    return testUser;
   }
   return null;
 }
@@ -386,69 +392,159 @@ export async function loginAsUser(
     throw new Error(`Password mismatch: expected "${password.substring(0, 5)}...", got "${filledPassword.substring(0, 5)}..."`);
   }
   
+  // Verify server is still alive before attempting login
+  if (backendAddress) {
+    try {
+      await writeLog(logTestName, `Checking backend health before login: ${backendAddress}/health_check`);
+      const healthCheck = await fetch(`${backendAddress}/health_check`, { signal: AbortSignal.timeout(5000) });
+      if (!healthCheck.ok) {
+        await writeLog(logTestName, `WARNING: Backend health check failed: ${healthCheck.status}`, 'error');
+      } else {
+        await writeLog(logTestName, 'Backend health check passed');
+      }
+    } catch (e: any) {
+      await writeLog(logTestName, `ERROR: Backend health check failed: ${e.message}`, 'error');
+      throw new Error(`Backend server appears to be down before login attempt: ${e.message}`);
+    }
+  }
+  
   // Set up a promise to wait for navigation BEFORE clicking submit
   // This ensures we catch the navigation even if it happens quickly
   const navigationPromise = page.waitForURL(/\/admin\/dashboard/, { timeout: 20000 });
+  
+  // Track if request was actually sent
+  let requestWasSent = false;
+  let requestStartTime: number | null = null;
   
   // Submit the form and wait for the login POST request to complete
   const loginRequestPromise = page.waitForResponse(
     (response: any) => {
       const url = response.url();
-      return url.includes('/login') && response.request().method() === 'POST';
+      const isLoginPost = url.includes('/login') && response.request().method() === 'POST';
+      if (isLoginPost) {
+        const elapsed = requestStartTime ? Date.now() - requestStartTime : 0;
+        // Fire-and-forget logging to avoid blocking
+        writeLog(logTestName, `Login response received after ${elapsed}ms: ${response.status()}`).catch(() => {});
+      }
+      return isLoginPost;
     },
-    { timeout: 15000 }
+    { timeout: 20000 } // Increased timeout
   );
   
   // Also capture the request to see what was sent
   let loginRequestBody: any = null;
   page.on('request', (request: any) => {
     if (request.url().includes('/login') && request.method() === 'POST') {
+      requestWasSent = true;
+      requestStartTime = Date.now();
+      // Fire-and-forget logging
+      writeLog(logTestName, `Login request sent to: ${request.url()}`).catch(() => {});
       // postData() returns synchronously (string | null), not a Promise
       const body = request.postData();
       if (body) {
         try {
           loginRequestBody = JSON.parse(body);
+          writeLog(logTestName, `Login request body: ${JSON.stringify(loginRequestBody)}`).catch(() => {});
         } catch (e) {
           loginRequestBody = body;
+          writeLog(logTestName, `Login request body (raw): ${body}`).catch(() => {});
         }
+      } else {
+        writeLog(logTestName, 'WARNING: Login request has no body', 'error').catch(() => {});
       }
     }
   });
   
+  // Also listen for request failures
+  page.on('requestfailed', (request: any) => {
+    if (request.url().includes('/login') && request.method() === 'POST') {
+      writeLog(logTestName, `ERROR: Login request failed: ${request.failure()?.errorText || 'Unknown error'}`, 'error').catch(() => {});
+    }
+  });
+  
+  await writeLog(logTestName, 'Clicking submit button...');
   await page.click('button[type="submit"]');
+  await writeLog(logTestName, 'Submit button clicked');
   
   // Wait for login response
   let loginResponseStatus = 0;
   let loginResponseData: any = null;
   try {
+    await writeLog(logTestName, 'Waiting for login response...');
+    
+    // Check if request was sent before waiting
+    await page.waitForTimeout(500); // Give request a moment to be sent
+    if (!requestWasSent) {
+      await writeLog(logTestName, 'ERROR: Login request was not sent after clicking submit', 'error');
+      throw new Error('Login request was not sent - form submission may have failed');
+    }
+    
     const loginResp = await loginRequestPromise;
     loginResponseStatus = loginResp.status();
     loginResponseData = await loginResp.json().catch(() => null);
     
-    // Log what was sent and received to test log file
+    // Log what was sent and received to test log file (including password for debugging test users)
     await writeLog(logTestName, `Login attempt - Sent: ${JSON.stringify(loginRequestBody)}, Status: ${loginResponseStatus}, Response: ${JSON.stringify(loginResponseData)}`);
     
     if (loginResponseStatus !== 200) {
       await writeLog(logTestName, `Login failed: ${JSON.stringify(loginResponseData)}`, 'error');
       // Verify what username/password were actually sent
       const sentUsername = loginRequestBody?.username || 'unknown';
-      const sentPasswordLength = loginRequestBody?.password ? loginRequestBody.password.length : 0;
+      const sentPassword = loginRequestBody?.password || 'unknown';
+      const sentPasswordLength = sentPassword !== 'unknown' ? sentPassword.length : 0;
+      
+      // Log full details including password for debugging
+      await writeLog(logTestName, `Login failure details - Sent username: "${sentUsername}", Sent password: "${sentPassword}", Expected username: "${username}", Expected password: "${password}"`, 'error');
+      
       throw new Error(`Login request failed with status ${loginResponseStatus}: ${JSON.stringify(loginResponseData)}. ` +
-        `Sent username: "${sentUsername}", password length: ${sentPasswordLength}, expected username: "${username}", expected password length: ${password.length}`);
+        `Sent username: "${sentUsername}", sent password: "${sentPassword}", expected username: "${username}", expected password: "${password}"`);
     }
     
     if (loginResponseData && !loginResponseData.success) {
-      throw new Error(`Login failed: ${loginResponseData.error || 'Unknown error'}`);
+      await writeLog(logTestName, `Login response indicates failure - Error: ${loginResponseData.error || 'Unknown error'}, Username: "${username}", Password: "${password}"`, 'error');
+      throw new Error(`Login failed: ${loginResponseData.error || 'Unknown error'}. Username: "${username}", Password: "${password}"`);
     }
   } catch (e: any) {
+    // Check if this is a timeout waiting for response
+    if (e.message && e.message.includes('Timeout') && e.message.includes('waitForResponse')) {
+      await writeLog(logTestName, `ERROR: Timeout waiting for login response. Request sent: ${requestWasSent}, Username: "${username}", Password: "${password}"`, 'error');
+      
+      // Check if server is still alive
+      if (backendAddress) {
+        try {
+          const healthCheck = await fetch(`${backendAddress}/health_check`, { signal: AbortSignal.timeout(3000) });
+          await writeLog(logTestName, `Backend health check after timeout: ${healthCheck.status}`, healthCheck.ok ? 'info' : 'error');
+        } catch (healthError: any) {
+          await writeLog(logTestName, `ERROR: Backend appears to be down after timeout: ${healthError.message}`, 'error');
+          throw new Error(`Login request timed out and backend server appears to be down: ${healthError.message}`);
+        }
+      }
+      
+      // Check if there's an error message displayed on the page
+      await page.waitForTimeout(1000);
+      const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/failed/i').isVisible().catch(() => false);
+      const currentUrl = page.url();
+      await page.screenshot({ path: `test-results/login-timeout-${Date.now()}.png` }).catch(() => {});
+      
+      if (errorVisible) {
+        const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Unknown error');
+        await writeLog(logTestName, `Login timeout with visible error - Error: ${errorText}, URL: ${currentUrl}`, 'error');
+        throw new Error(`Login request timed out. Page shows error: ${errorText}. Current URL: ${currentUrl}. Username: "${username}", Password: "${password}"`);
+      }
+      
+      throw new Error(`Login request timed out - no response received. Request sent: ${requestWasSent}, Current URL: ${currentUrl}. Username: "${username}", Password: "${password}"`);
+    }
+    
     // Check if there's an error message displayed on the page
     await page.waitForTimeout(1000); // Give error message time to appear
     const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/failed/i').isVisible().catch(() => false);
     if (errorVisible) {
       const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Authentication failed');
       await page.screenshot({ path: `test-results/login-error-${Date.now()}.png` }).catch(() => {});
-      throw new Error(`Login failed with error: ${errorText}. Original error: ${e.message}`);
+      await writeLog(logTestName, `Login exception with visible error - Error: ${errorText}, Original: ${e.message}, Username: "${username}", Password: "${password}"`, 'error');
+      throw new Error(`Login failed with error: ${errorText}. Original error: ${e.message}. Username: "${username}", Password: "${password}"`);
     }
+    await writeLog(logTestName, `Login exception - Error: ${e.message}, Username: "${username}", Password: "${password}"`, 'error');
     throw e;
   }
   
@@ -464,7 +560,8 @@ export async function loginAsUser(
     // Check if we navigated anyway
     const currentUrl = page.url();
     if (!currentUrl.includes('/admin/dashboard')) {
-      throw new Error(`Auth check failed or timed out. Still on ${currentUrl}. Login was successful (${loginResponseStatus}) but navigation didn't happen.`);
+      await writeLog(logTestName, `Auth check failed or timed out - Current URL: ${currentUrl}, Login response status: ${loginResponseStatus}, Username: "${username}", Password: "${password}"`, 'error');
+      throw new Error(`Auth check failed or timed out. Still on ${currentUrl}. Login was successful (${loginResponseStatus}) but navigation didn't happen. Username: "${username}", Password: "${password}"`);
     }
     // If we're on dashboard, that's okay - continue
   }
@@ -485,7 +582,8 @@ export async function loginAsUser(
     if (errorVisible) {
       const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Unknown error');
       await page.screenshot({ path: `test-results/login-error-${Date.now()}.png` }).catch(() => {});
-      throw new Error(`Login failed with error: ${errorText}. Current URL: ${finalUrl}`);
+      await writeLog(logTestName, `Login failed with visible error - Error: ${errorText}, Current URL: ${finalUrl}, Username: "${username}", Password: "${password}"`, 'error');
+      throw new Error(`Login failed with error: ${errorText}. Current URL: ${finalUrl}. Username: "${username}", Password: "${password}"`);
     }
     
     // Check if we're stuck on login page (might be a redirect loop)
@@ -521,9 +619,12 @@ export async function loginAsUser(
     const cookies = await page.context().cookies();
     const sessionCookie = cookies.find(c => c.name.includes('session') || c.name.includes('sid'));
     
+    // Log full details including password for debugging
+    await writeLog(logTestName, `Login navigation failed - Final URL: ${finalUrl}, Login response status: ${loginResponseStatus}, Session cookie present: ${!!sessionCookie}, Cookies: ${cookies.map(c => c.name).join(', ')}, Sent username: "${username}", Sent password: "${password}"`, 'error');
+    
     throw new Error(`Login failed: expected to be on /admin/dashboard, but was on ${finalUrl}. ` +
       `Login response: ${loginResponseStatus}, Session cookie present: ${!!sessionCookie}, ` +
-      `Cookies: ${cookies.map(c => c.name).join(', ')}`);
+      `Cookies: ${cookies.map(c => c.name).join(', ')}, Sent username: "${username}", Sent password: "${password}"`);
   }
   
   // Verify session cookie was set

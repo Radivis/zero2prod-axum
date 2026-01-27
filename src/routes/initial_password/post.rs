@@ -10,6 +10,7 @@ use tower_sessions::Session;
 
 #[derive(serde::Deserialize)]
 pub struct InitialPasswordFormData {
+    username: String,
     password: Secret<String>,
     password_confirmation: Secret<String>,
 }
@@ -87,9 +88,9 @@ pub async fn create_initial_password(
         return Err(InitialPasswordError::PasswordTooLong);
     }
 
-    // Create admin user with username "admin"
+    // Create admin user with provided username
     let _user_id =
-        crate::authentication::create_admin_user("admin".to_string(), form.password, &state.db)
+        crate::authentication::create_admin_user(form.username, form.password, &state.db)
             .await
             .context("Failed to create admin user")?;
 

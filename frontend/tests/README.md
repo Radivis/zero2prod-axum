@@ -72,6 +72,71 @@ npx playwright test tests/e2e/login.spec.ts
 - `tests/fixtures.ts` - Playwright fixtures that set up backend/frontend servers
 - `tests/e2e/*.spec.ts` - Individual test files
 
+## Fixture Usage
+
+The test fixtures have been simplified to eliminate code duplication:
+
+### Available Fixtures
+
+1. **`backendApp`**: Spawns an isolated backend server with a fresh database (no users)
+2. **`frontendServer`**: Spawns the Vite dev server (depends on `backendApp`)
+3. **`authenticatedPage`**: A page that's already logged in (creates user via `makeUser`)
+
+### Creating Users
+
+Use the `makeUser` helper function to create users via the REST API:
+
+```typescript
+import { test, expect, makeUser } from '../fixtures';
+
+test('my test', async ({ page, backendApp, frontendServer }) => {
+  // Create a user
+  const result = await makeUser(backendApp.address, 'username', 'password123456');
+  
+  if (!result.success) {
+    throw new Error(`Failed to create user: ${result.error?.error}`);
+  }
+  
+  // Now you can login with these credentials
+});
+```
+
+### Usage Examples
+
+**Tests without users (e.g., initial password, redirect to initial password):**
+```typescript
+test('redirects when no users', async ({ page, backendApp, frontendServer }) => {
+  await page.goto('/login');
+  // Should redirect to initial_password
+});
+```
+
+**Tests that need a user (e.g., login):**
+```typescript
+test('login works', async ({ page, backendApp, frontendServer }) => {
+  const result = await makeUser(backendApp.address, 'user', 'pass123456');
+  await page.goto('/login');
+  await page.fill('[name="username"]', 'user');
+  await page.fill('[type="password"]', 'pass123456');
+  await page.click('[type="submit"]');
+});
+```
+
+**Tests that need authentication (e.g., dashboard, protected routes):**
+```typescript
+test('dashboard works', async ({ authenticatedPage }) => {
+  // authenticatedPage is already logged in
+  await authenticatedPage.goto('/admin/dashboard');
+});
+```
+
+### Why This Approach?
+
+- **No duplication**: Single `backendApp` and `frontendServer` fixtures
+- **Flexible**: Tests create users only when needed via `makeUser`
+- **Realistic**: Users are created through the actual API, not backend shortcuts
+- **Clear**: The `makeUser` function returns success/error, making test intent explicit
+
 ## Logging
 
 Each E2E test writes detailed logs to `frontend/tests/logs/e2e/<test-name>.log`. These logs include:

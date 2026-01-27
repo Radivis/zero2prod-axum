@@ -40,11 +40,11 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 pub fn test_writer() -> NonBlocking {
     // nextest passes the test name via --exact argument
     // uncomment the next line and run "cargo test --no-capture" to see how the args are structured:
-    // std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
+    std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
     let test_name = std::env::args()
         .skip_while(|arg| arg != "--exact")
         .nth(1) // we need the first arg exactly after "--exact"
-        .and_then(|arg| arg.split("::").last().map(str::to_owned))
+        .and_then(|arg| Some(arg.replace("::", "-").to_string()))
         .unwrap_or("unlabeled_test".into())
         .replace(' ', "_");
 
@@ -253,6 +253,23 @@ impl TestUser {
     }
 
     async fn store(&self, pool: &PgPool) {
+        // Debug: Check which database we're storing to
+        let db_name_result = sqlx::query!("SELECT current_database() as db_name")
+            .fetch_one(pool)
+            .await;
+
+        match db_name_result {
+            Ok(db_info) => {
+                eprintln!(
+                    "[STORE DEBUG] Storing user to database: {:?}",
+                    db_info.db_name
+                );
+            }
+            Err(e) => {
+                eprintln!("[STORE DEBUG] Could not get database name: {:?}", e);
+            }
+        }
+
         let salt = SaltString::generate(&mut rand::thread_rng());
         // Match parameters of the default password
         let password_hash = Argon2::new(
@@ -273,6 +290,8 @@ impl TestUser {
         .execute(pool)
         .await
         .expect("Failed to store test user.");
+
+        eprintln!("[STORE DEBUG] User stored successfully: {}", self.username);
     }
 }
 
@@ -291,6 +310,10 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
         let mut c = get_configuration().expect("Failed to read configuration.");
         // Use a different database for each test case
         c.database.database_name = format!("test-{}", test_name);
+        eprintln!(
+            "[SPAWN_APP DEBUG] Creating database: {}",
+            c.database.database_name
+        );
         // Use a random OS port
         c.application.port = 0;
         c.email_client.base_url = email_server.uri();
@@ -298,6 +321,10 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
     };
 
     let db_connection_pool = configure_database(&configuration.database).await;
+    eprintln!(
+        "[SPAWN_APP DEBUG] Database configured: {}",
+        configuration.database.database_name
+    );
 
     // Notice the .clone!
     let application = Application::build(configuration.clone())
