@@ -4,10 +4,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-// Helper to write to log file
-async function writeLog(testName: string, message: string, level: 'info' | 'error' | 'debug' = 'info') {
+// ES module equivalent of __dirname - MUST be defined BEFORE use
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const sleep = promisify(setTimeout);
+
+// Helper to write to log file (fire-and-forget to avoid blocking)
+// source: TEST (Playwright test), FRONTEND (Vite server), BACKEND (test server)
+function writeLog(testName: string, message: string, source: 'TEST' | 'FRONTEND' | 'BACKEND' = 'TEST') {
   const logsDir = path.join(__dirname, 'logs', 'e2e');
-  await fs.promises.mkdir(logsDir, { recursive: true }).catch(() => {});
   
   const sanitizedTestName = testName
     .replace(/\s+/g, '_')
@@ -16,14 +22,12 @@ async function writeLog(testName: string, message: string, level: 'info' | 'erro
   
   const logFile = path.join(logsDir, `${sanitizedTestName}.log`);
   const timestamp = new Date().toISOString();
-  await fs.promises.appendFile(logFile, `[${timestamp}] [${level.toUpperCase()}] ${message}\n`).catch(() => {});
+  
+  // Fire-and-forget: don't await, just log errors if they occur
+  fs.promises.mkdir(logsDir, { recursive: true })
+    .then(() => fs.promises.appendFile(logFile, `[${timestamp}] [${source}] ${message}\n`))
+    .catch(() => {}); // Silently ignore errors to avoid blocking tests
 }
-
-const sleep = promisify(setTimeout);
-
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export interface TestApp {
   port: number;
@@ -51,50 +55,47 @@ export interface TestUser {
 export async function spawnTestApp(testName: string): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
   
-  await writeLog(testName, `Starting test app spawn: testName=${testName}`);
+  writeLog(testName, `Starting test app spawn: testName=${testName}`, 'BACKEND');
   
-  // Build the binary first (with e2e-tests feature to access test dependencies)
-  await writeLog(testName, 'Building spawn_test_server binary...');
-  const cargoBuild = spawn('cargo', ['build', '--bin', 'spawn_test_server', '--features', 'e2e-tests', '--release'], {
-    cwd: projectRoot,
-    stdio: 'pipe', // Capture output to write to log
-  });
-  
-  let buildOutput = '';
-  cargoBuild.stdout?.on('data', (data) => {
-    buildOutput += data.toString();
-  });
-  cargoBuild.stderr?.on('data', (data) => {
-    buildOutput += data.toString();
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    cargoBuild.on('close', async (code) => {
-      if (code === 0) {
-        await writeLog(testName, 'Binary build successful');
-        resolve();
-      } else {
-        await writeLog(testName, `Cargo build failed with code ${code}\n${buildOutput}`, 'error');
-        reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
-      }
-    });
-    cargoBuild.on('error', async (err) => {
-      await writeLog(testName, `Failed to start cargo build: ${err.message}`, 'error');
-      reject(new Error(`Failed to start cargo build: ${err.message}`));
-    });
-  });
-
-  // Spawn the test server binary
+  // Check if binary exists, if not build it
   const binaryPath = path.join(projectRoot, 'target', 'release', 'spawn_test_server');
+  const binaryExists = await fs.promises.access(binaryPath).then(() => true).catch(() => false);
   
-  // Create log file for this test
-  const sanitizedTestName = testName
-    .replace(/\s+/g, '_')
-    .replace(/[\/\\:]/g, '_')
-    .substring(0, 100);
-  const logFile = path.join(__dirname, 'logs', 'e2e', `${sanitizedTestName}.log`);
-  await fs.promises.mkdir(path.dirname(logFile), { recursive: true }).catch(() => {});
-  const logFileHandle = await fs.promises.open(logFile, 'w').catch(() => null);
+  if (!binaryExists) {
+    await writeLog(testName, 'Binary not found, building spawn_test_server...', 'BACKEND');
+    const cargoBuild = spawn('cargo', ['build', '--bin', 'spawn_test_server', '--features', 'e2e-tests', '--release'], {
+      cwd: projectRoot,
+      stdio: 'pipe',
+    });
+    
+    let buildOutput = '';
+    cargoBuild.stdout?.on('data', (data) => {
+      buildOutput += data.toString();
+    });
+    cargoBuild.stderr?.on('data', (data) => {
+      buildOutput += data.toString();
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      cargoBuild.on('close', async (code) => {
+        if (code === 0) {
+          await writeLog(testName, 'Binary build successful', 'BACKEND');
+          resolve();
+        } else {
+          await writeLog(testName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
+          reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
+        }
+      });
+      cargoBuild.on('error', async (err) => {
+        await writeLog(testName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
+        reject(new Error(`Failed to start cargo build: ${err.message}`));
+      });
+    });
+  } else {
+    writeLog(testName, 'Using existing binary', 'BACKEND');
+  }
+  
+  // Log file will be created automatically by writeLog function
   
   const testServerProcess = spawn(
     binaryPath,
@@ -105,6 +106,7 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
         ...process.env,
         TEST_NAME: testName,
         CREATE_USER: 'false', // Always false - users created via makeUser() instead
+        TEST_LOG: '1', // Enable tracing output to stdout for E2E tests
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     }
@@ -115,20 +117,15 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
   testServerProcess.stdout?.on('data', async (data) => {
     const dataStr = data.toString();
     output += dataStr;
-    if (logFileHandle) {
-      await fs.promises.appendFile(logFile, `[BACKEND STDOUT] ${dataStr}`).catch(() => {});
-    }
-    await writeLog(testName, `[BACKEND STDOUT] ${dataStr}`, 'debug');
+    // Only log via writeLog - no direct file writing
+    writeLog(testName, `${dataStr}`, 'BACKEND');
   });
   
-  // Write stderr to log file only (not console)
+  // Write stderr to log file
   testServerProcess.stderr?.on('data', async (data) => {
     const dataStr = data.toString();
-    // Write to log file only, don't clutter console
-    if (logFileHandle) {
-      await fs.promises.appendFile(logFile, `[BACKEND STDERR] ${dataStr}`).catch(() => {});
-    }
-    await writeLog(testName, `[BACKEND STDERR] ${dataStr}`, 'debug');
+    // Only log via writeLog - no direct file writing
+    writeLog(testName, `${dataStr}`, 'BACKEND');
   });
 
   // Wait for the server to output the port information
@@ -144,17 +141,20 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
   const startTime = Date.now();
 
   while (!serverInfo && Date.now() - startTime < maxWait) {
-    if (output.includes('{')) {
+    if (output.includes('"address"') && output.includes('"port"')) {
       try {
         const lines = output.split('\n');
         for (const line of lines) {
-          if (line.trim().startsWith('{')) {
-            serverInfo = JSON.parse(line.trim());
+          const trimmed = line.trim();
+          // Try to find JSON in the line - it might be prefixed with timestamp/logger output
+          const jsonMatch = trimmed.match(/\{.*"address".*"port".*\}/);
+          if (jsonMatch) {
+            serverInfo = JSON.parse(jsonMatch[0]);
             break;
           }
         }
       } catch (e) {
-        // Not JSON yet, continue waiting
+        // Not valid JSON yet, continue waiting
       }
     }
     if (!serverInfo) {
@@ -164,33 +164,22 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
 
   if (!serverInfo) {
     testServerProcess.kill();
-    if (logFileHandle) {
-      await fs.promises.appendFile(logFile, `\n=== ERROR: Failed to start test server ===\nOutput: ${output}\n`).catch(() => {});
-      await logFileHandle.close().catch(() => {});
-    }
-    await writeLog(testName, `Failed to start test server: no port information received. Output: ${output}`, 'error');
-    throw new Error(`Failed to start test server: no port information received. See log file: ${logFile}`);
+    await writeLog(testName, `ERROR: Failed to start test server: no port information received. Output: ${output}`, 'BACKEND');
+    throw new Error(`Failed to start test server: no port information received`);
   }
 
-  await writeLog(testName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`);
+  await writeLog(testName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
 
   // Wait for the backend server to be ready by checking health endpoint
   try {
-    await writeLog(testName, 'Waiting for backend to be ready...');
+    await writeLog(testName, 'Waiting for backend to be ready...', 'BACKEND');
     await waitForBackendReady(serverInfo.address, 30000);
-    await writeLog(testName, 'Backend is ready');
+    await writeLog(testName, 'Backend is ready', 'BACKEND');
   } catch (error) {
     testServerProcess.kill();
-    if (logFileHandle) {
-      await fs.promises.appendFile(logFile, `\n=== ERROR: Backend did not become ready ===\n${error}\n`).catch(() => {});
-      await logFileHandle.close().catch(() => {});
-    }
-    await writeLog(testName, `Backend server did not become ready: ${error}`, 'error');
-    throw new Error(`Backend server did not become ready: ${error}. See log file: ${logFile}`);
+    await writeLog(testName, `ERROR: Backend server did not become ready: ${error}`, 'BACKEND');
+    throw new Error(`Backend server did not become ready: ${error}`);
   }
-  
-  // Store log file path in the app object for later reference
-  (serverInfo as any).logFile = logFile;
 
   const app: TestApp = {
     port: serverInfo.port,
@@ -202,10 +191,6 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     process: testServerProcess,
   };
   
-  // Store log file path and handle for later reference
-  (app as any).logFile = logFile;
-  (app as any).logFileHandle = logFileHandle;
-  
   return app;
 }
 
@@ -213,16 +198,9 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
  * Stop a test app
  */
 export async function stopTestApp(app: TestApp): Promise<void> {
-  // Close log file if it exists
-  const logFileHandle = (app as any).logFileHandle;
-  if (logFileHandle) {
-    await logFileHandle.close().catch(() => {});
-  }
-  
-  // Write final log entry if log file exists
-  const logFile = (app as any).logFile;
-  if (logFile && app.testName) {
-    await writeLog(app.testName, 'Test app stopped', 'info').catch(() => {});
+  // Write final log entry
+  if (app.testName) {
+    writeLog(app.testName, 'Test app stopped', 'BACKEND'); // Fire-and-forget
   }
   
   if (app.process && !app.process.killed && app.process.pid) {
@@ -333,16 +311,16 @@ export async function loginAsUser(
   const logTestName = testName || 'login';
   // If backend address is provided, verify the user exists before attempting login
   if (backendAddress) {
-    await writeLog(logTestName, `Verifying users exist at ${backendAddress}...`);
+    await writeLog(logTestName, `Verifying users exist at ${backendAddress}...`, 'TEST');
     // Verify user exists by checking if any users exist
     const usersExistResponse = await fetch(`${backendAddress}/api/users/exists`);
     if (usersExistResponse.ok) {
       const usersExist = await usersExistResponse.json();
       if (!usersExist.users_exist) {
-        await writeLog(logTestName, 'ERROR: No users exist in database', 'error');
+        await writeLog(logTestName, 'ERROR: No users exist in database', 'TEST');
         throw new Error('Cannot login: No users exist in database');
       }
-      await writeLog(logTestName, 'Users exist in database');
+      await writeLog(logTestName, 'Users exist in database', 'TEST');
     }
     
     // Give the database a moment to ensure the user is fully committed
@@ -394,15 +372,15 @@ export async function loginAsUser(
   // Verify server is still alive before attempting login
   if (backendAddress) {
     try {
-      await writeLog(logTestName, `Checking backend health before login: ${backendAddress}/health_check`);
+      await writeLog(logTestName, `Checking backend health before login: ${backendAddress}/health_check`, 'TEST');
       const healthCheck = await fetch(`${backendAddress}/health_check`, { signal: AbortSignal.timeout(5000) });
       if (!healthCheck.ok) {
-        await writeLog(logTestName, `WARNING: Backend health check failed: ${healthCheck.status}`, 'error');
+        await writeLog(logTestName, `WARNING: Backend health check failed: ${healthCheck.status}`, 'TEST');
       } else {
-        await writeLog(logTestName, 'Backend health check passed');
+        await writeLog(logTestName, 'Backend health check passed', 'TEST');
       }
     } catch (e: any) {
-      await writeLog(logTestName, `ERROR: Backend health check failed: ${e.message}`, 'error');
+      await writeLog(logTestName, `ERROR: Backend health check failed: ${e.message}`, 'TEST');
       throw new Error(`Backend server appears to be down before login attempt: ${e.message}`);
     }
   }
@@ -423,7 +401,7 @@ export async function loginAsUser(
       if (isLoginPost) {
         const elapsed = requestStartTime ? Date.now() - requestStartTime : 0;
         // Fire-and-forget logging to avoid blocking
-        writeLog(logTestName, `Login response received after ${elapsed}ms: ${response.status()}`).catch(() => {});
+        writeLog(logTestName, `Login response received after ${elapsed}ms: ${response.status()}`, 'TEST');
       }
       return isLoginPost;
     },
@@ -443,13 +421,13 @@ export async function loginAsUser(
       if (body) {
         try {
           loginRequestBody = JSON.parse(body);
-          writeLog(logTestName, `Login request body: ${JSON.stringify(loginRequestBody)}`).catch(() => {});
+          writeLog(logTestName, `Login request body: ${JSON.stringify(loginRequestBody)}`, 'TEST');
         } catch (e) {
           loginRequestBody = body;
-          writeLog(logTestName, `Login request body (raw): ${body}`).catch(() => {});
+          writeLog(logTestName, `Login request body (raw): ${body}`, 'TEST');
         }
       } else {
-        writeLog(logTestName, 'WARNING: Login request has no body', 'error').catch(() => {});
+        writeLog(logTestName, 'WARNING: Login request has no body', 'TEST');
       }
     }
   });
@@ -457,13 +435,13 @@ export async function loginAsUser(
   // Also listen for request failures
   page.on('requestfailed', (request: any) => {
     if (request.url().includes('/login') && request.method() === 'POST') {
-      writeLog(logTestName, `ERROR: Login request failed: ${request.failure()?.errorText || 'Unknown error'}`, 'error').catch(() => {});
+      writeLog(logTestName, `ERROR: Login request failed: ${request.failure()?.errorText || 'Unknown error'}`, 'TEST');
     }
   });
   
-  await writeLog(logTestName, 'Clicking submit button...');
+  await writeLog(logTestName, 'Clicking submit button...', 'TEST');
   await page.click('button[type="submit"]');
-  await writeLog(logTestName, 'Submit button clicked');
+  await writeLog(logTestName, 'Submit button clicked', 'TEST');
   
   // Wait for login response
   let loginResponseStatus = 0;

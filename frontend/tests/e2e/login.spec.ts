@@ -22,8 +22,10 @@ test.describe('Login', () => {
     await page.fill('input[type="password"]', password);
     
     // Submit the form and wait for navigation
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/\/admin\/dashboard/, { timeout: 15000 });
+    await Promise.all([
+      page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 }),
+      page.click('button[type="submit"]'),
+    ]);
     
     // Verify we're on the dashboard
     expect(page.url()).toContain('/admin/dashboard');

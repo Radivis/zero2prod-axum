@@ -39,8 +39,8 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 
 pub fn test_writer() -> NonBlocking {
     // nextest passes the test name via --exact argument
-    // uncomment the next line and run "cargo test --no-capture" to see how the args are structured:
-    std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
+    // uncomment the next line and run "cargo test" to see how the args are structured:
+    // std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
     let test_name = std::env::args()
         .skip_while(|arg| arg != "--exact")
         .nth(1) // we need the first arg exactly after "--exact"
@@ -368,6 +368,24 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to Postgres");
+
+    // Terminate all connections to the database before dropping it
+    connection
+        .execute(
+            format!(
+                r#"
+                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                FROM pg_stat_activity
+                WHERE pg_stat_activity.datname = '{}'
+                  AND pid <> pg_backend_pid();
+                "#,
+                config.database_name
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to terminate connections");
+
     // Drop database from previous test
     connection
         .execute(format!(r#"DROP DATABASE IF EXISTS "{}";"#, config.database_name).as_str())

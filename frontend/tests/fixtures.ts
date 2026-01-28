@@ -5,8 +5,9 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as fs from 'fs';
 
-// Helper to write to log file
-async function writeLog(testName: string, message: string, level: 'info' | 'error' | 'debug' = 'info') {
+// Helper function to write logs
+// source: TEST (Playwright test), FRONTEND (Vite server), BACKEND (test server)
+async function writeLog(testName: string, message: string, source: 'TEST' | 'FRONTEND' | 'BACKEND' = 'TEST') {
   const logsDir = path.join(__dirname, 'logs', 'e2e');
   await fs.promises.mkdir(logsDir, { recursive: true }).catch(() => {});
   
@@ -17,7 +18,7 @@ async function writeLog(testName: string, message: string, level: 'info' | 'erro
   
   const logFile = path.join(logsDir, `${sanitizedTestName}.log`);
   const timestamp = new Date().toISOString();
-  await fs.promises.appendFile(logFile, `[${timestamp}] [${level.toUpperCase()}] ${message}\n`).catch(() => {});
+  await fs.promises.appendFile(logFile, `[${timestamp}] [${source}] ${message}\n`).catch(() => {});
 }
 
 // ES module equivalent of __dirname
@@ -131,28 +132,31 @@ export const test = base.extend<TestFixtures>({
   // Backend test app fixture (always starts with blank database, no users)
   backendApp: async ({}, use, testInfo) => {
     const testName = testInfo.titlePath.join(' > ');
-    const sanitizedTestName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
-    await writeLog(sanitizedTestName, `Starting test: ${testName}`);
+    // Use e2e- prefix to match what spawnTestApp uses
+    const sanitizedTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
+    await writeLog(sanitizedTestName, `Starting test: ${testName}`, 'TEST');
     
     // Always spawn without a user - tests create users via makeUser() if needed
     let app: TestApp;
     try {
-      app = await spawnTestApp(`e2e-${sanitizedTestName}`);
+      app = await spawnTestApp(sanitizedTestName);
     } catch (error) {
-      await writeLog(sanitizedTestName, `ERROR: Failed to spawn backend app: ${error}`, 'error');
+      await writeLog(sanitizedTestName, `ERROR: Failed to spawn backend app: ${error}`, 'TEST');
       throw error;
     }
     
     await use(app);
     
     // Cleanup
-    await writeLog(sanitizedTestName, 'Cleaning up backend app');
+    await writeLog(sanitizedTestName, 'Cleaning up backend app', 'TEST');
     await stopTestApp(app);
   },
 
   // Frontend server fixture
-  frontendServer: async ({ backendApp }, use) => {
+  frontendServer: async ({ backendApp }, use, testInfo) => {
     const app = backendApp;
+    // Use e2e- prefix to match backendApp
+    const sanitizedTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
     
     // Ensure backend is ready before starting frontend
     const { waitForBackendReady } = await import('./helpers');
@@ -161,6 +165,8 @@ export const test = base.extend<TestFixtures>({
     } catch (error) {
       throw new Error(`Backend not ready before starting frontend: ${error}`);
     }
+    
+    await writeLog(sanitizedTestName, `Starting Vite dev server with backend port ${app.port}`, 'FRONTEND');
     
     // Start Vite dev server with the backend port
     const viteProcess = spawn('npm', ['run', 'dev'], {
@@ -190,13 +196,22 @@ export const test = base.extend<TestFixtures>({
     let viteError = '';
     viteProcess.stdout?.on('data', (data) => {
       const output = data.toString();
+      const trimmed = output.trim();
+      if (trimmed) {
+        writeLog(sanitizedTestName, trimmed, 'FRONTEND');
+      }
       if (output.includes('Local:') || output.includes('ready') || output.includes('VITE')) {
         viteReady = true;
       }
     });
     
     viteProcess.stderr?.on('data', (data) => {
-      viteError += data.toString();
+      const output = data.toString();
+      viteError += output;
+      const trimmed = output.trim();
+      if (trimmed) {
+        writeLog(sanitizedTestName, trimmed, 'FRONTEND');
+      }
     });
 
     // Wait up to 30 seconds for Vite to start
@@ -236,6 +251,7 @@ export const test = base.extend<TestFixtures>({
     await use(viteProcess);
 
     // Cleanup - kill Vite process and all its children
+    await writeLog(sanitizedTestName, 'Stopping Vite dev server', 'FRONTEND');
     try {
       if (viteProcess.pid && !viteProcess.killed) {
         if (process.platform !== 'win32') {
@@ -270,34 +286,51 @@ export const test = base.extend<TestFixtures>({
 
   // Authenticated page fixture - creates a user and logs in
   authenticatedPage: async ({ page, backendApp, frontendServer }, use, testInfo) => {
-    const sanitizedTestName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    // Use e2e- prefix to match backendApp
+    const sanitizedTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
     
     // Generate random credentials
     const username = `test-user-${Math.random().toString(36).substring(7)}`;
     const password = `test-pass-${Math.random().toString(36).substring(7)}`;
     
     // Create user via REST API
-    await writeLog(sanitizedTestName, `Creating user via API: ${username}`);
+    await writeLog(sanitizedTestName, `Creating user via API: ${username}`, 'TEST');
     const userResult = await makeUser(backendApp.address, username, password);
     
     if (!userResult.success) {
       const errorMsg = `Failed to create user: ${userResult.error?.error || 'Unknown error'}`;
-      await writeLog(sanitizedTestName, `ERROR: ${errorMsg}`, 'error');
+      await writeLog(sanitizedTestName, `ERROR: ${errorMsg}`, 'TEST');
       throw new Error(errorMsg);
     }
     
-    await writeLog(sanitizedTestName, `User created successfully: ${username}`);
+    await writeLog(sanitizedTestName, `User created successfully: ${username}`, 'TEST');
 
     // Login via the browser
-    await writeLog(sanitizedTestName, 'Starting browser login...');
+    await writeLog(sanitizedTestName, 'Starting browser login...', 'TEST');
     await page.goto('http://localhost:3000/login');
+    await writeLog(sanitizedTestName, `Filling login form with username: ${username}`, 'TEST');
     await page.fill('input[name="username"], input[placeholder="Enter Username"]', username);
     await page.fill('input[type="password"]', password);
-    await page.click('button[type="submit"]');
+    
+    // Wait for login response and navigation
+    await writeLog(sanitizedTestName, 'Submitting login form...', 'TEST');
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.url().includes('/login') && response.request().method() === 'POST'),
+      page.click('button[type="submit"]'),
+    ]);
+    
+    const loginStatus = response.status();
+    const loginBody = await response.text();
+    await writeLog(sanitizedTestName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
+    
+    if (!response.ok()) {
+      throw new Error(`Login failed with status ${loginStatus}: ${loginBody}`);
+    }
     
     // Wait for successful login (redirect to dashboard)
+    await writeLog(sanitizedTestName, 'Waiting for redirect to dashboard...', 'TEST');
     await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
-    await writeLog(sanitizedTestName, 'Browser login successful');
+    await writeLog(sanitizedTestName, 'Browser login successful', 'TEST');
 
     await use(page);
   },

@@ -19,14 +19,13 @@ use std::io::{self, Write};
 #[cfg(feature = "e2e-tests")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Note: Tracing is initialized by helpers.rs
+    // If TEST_LOG=1 is set in the environment, it will output to stdout
+    // which will be captured by the Node.js process
+
     // Get test name from environment variable or use default
     let test_name =
         std::env::var("TEST_NAME").unwrap_or_else(|_| format!("e2e-{}", uuid::Uuid::new_v4()));
-
-    // Note: stderr output (including warnings from helpers.rs) will be captured
-    // by Node.js and written to the log file. We don't need to redirect it here.
-    // The tracing system from helpers.rs writes to its own log file in tests/logs/,
-    // but that's separate from the E2E test logs.
 
     // Check if we should create a user (default: true)
     let create_user = std::env::var("CREATE_USER")
