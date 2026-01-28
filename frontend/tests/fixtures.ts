@@ -1,25 +1,9 @@
 import { test as base, Page } from '@playwright/test';
-import { spawnTestApp, stopTestApp, TestApp } from './helpers';
+import { spawnTestApp, stopTestApp, TestApp, waitForBackendReady } from './init';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import * as fs from 'fs';
-
-// Helper function to write logs
-// source: TEST (Playwright test), FRONTEND (Vite server), BACKEND (test server)
-async function writeLog(testName: string, message: string, source: 'TEST' | 'FRONTEND' | 'BACKEND' = 'TEST') {
-  const logsDir = path.join(__dirname, 'logs', 'e2e-telemetry');
-  await fs.promises.mkdir(logsDir, { recursive: true }).catch(() => {});
-  
-  const sanitizedTestName = testName
-    .replace(/\s+/g, '_')
-    .replace(/[\/\\:]/g, '_')
-    .substring(0, 100);
-  
-  const logFile = path.join(logsDir, `${sanitizedTestName}.log`);
-  const timestamp = new Date().toISOString();
-  await fs.promises.appendFile(logFile, `[${timestamp}] [${source}] ${message}\n`).catch(() => {});
-}
+import { loginAsUser, writeLog } from './helpers';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -121,12 +105,50 @@ export async function makeUser(
   }
 }
 
+export async function loginSimple(
+  username: string,
+  password: string,
+  logFileName: string,
+  frontendServer: { process: ChildProcess, port: number, url: string },
+  page: Page
+): Promise<void> {
+    // Login via the browser
+    await writeLog(logFileName, 'Starting browser login...', 'TEST');
+    await page.goto(`${frontendServer.url}/login`);
+    await writeLog(logFileName, `Filling login form with username: ${username}`, 'TEST');
+    await page.fill('input[name="username"]', username);
+    await page.fill('input[type="password"]', password);
+    
+    // Wait for login response and navigation
+    await writeLog(logFileName, 'Submitting login form...', 'TEST');
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.url().includes('/login') && response.request().method() === 'POST'),
+      page.click('button[type="submit"]'),
+    ]);
+    
+    const loginStatus = response.status();
+    const loginBody = await response.text();
+    await writeLog(logFileName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
+    
+    if (!response.ok()) {
+      throw new Error(`Login failed with status ${loginStatus}: ${loginBody}`);
+    }
+
+}
+
+// Frontend server type
+export interface FrontendServer {
+  process: ChildProcess;
+  port: number;
+  url: string;
+}
+
 // Extend the base test with our custom fixtures
-type TestFixtures = {
+interface TestFixtures {
   backendApp: TestApp;
-  frontendServer: ChildProcess;
+  frontendServer: FrontendServer;
   authenticatedPage: Page;
-};
+}
 
 export const test = base.extend<TestFixtures>({
   // Backend test app fixture (always starts with blank database, no users)
@@ -154,14 +176,13 @@ export const test = base.extend<TestFixtures>({
     await stopTestApp(app);
   },
 
-  // Frontend server fixture
+  // Frontend server fixture - returns { process, port, url }
   frontendServer: async ({ backendApp }, use, testInfo) => {
     const app = backendApp;
     // Log file name without e2e- prefix
     const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
     
     // Ensure backend is ready before starting frontend
-    const { waitForBackendReady } = await import('./helpers');
     try {
       await waitForBackendReady(app.address, 30000);
     } catch (error) {
@@ -193,15 +214,27 @@ export const test = base.extend<TestFixtures>({
       }
     }
 
-    // Wait for Vite to be ready
+    // Wait for Vite to be ready and extract the port
     let viteReady = false;
     let viteError = '';
+    let frontendPort = 3000; // Default, but will be extracted from output
+    let fullOutput = '';
+    
     viteProcess.stdout?.on('data', (data) => {
       const output = data.toString();
+      fullOutput += output;
       const trimmed = output.trim();
       if (trimmed) {
         writeLog(logFileName, trimmed, 'FRONTEND');
       }
+      
+      // Extract port from Vite output like "➜  Local:   http://localhost:3003/"
+      const portMatch = output.match(/Local:\s+http:\/\/localhost:(\d+)/);
+      if (portMatch) {
+        frontendPort = parseInt(portMatch[1], 10);
+        writeLog(logFileName, `Detected frontend port: ${frontendPort}`, 'TEST');
+      }
+      
       if (output.includes('Local:') || output.includes('ready') || output.includes('VITE')) {
         viteReady = true;
       }
@@ -232,10 +265,13 @@ export const test = base.extend<TestFixtures>({
     let frontendAccessible = false;
     const frontendCheckStart = Date.now();
     const frontendMaxWait = 10000;
+    const frontendUrl = `http://localhost:${frontendPort}`;
+    
+    await writeLog(logFileName, `Checking frontend accessibility at ${frontendUrl}`, 'TEST');
     
     while (!frontendAccessible && Date.now() - frontendCheckStart < frontendMaxWait) {
       try {
-        const response = await fetch('http://localhost:3000');
+        const response = await fetch(frontendUrl);
         frontendAccessible = true;
       } catch (error) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -244,39 +280,41 @@ export const test = base.extend<TestFixtures>({
     
     if (!frontendAccessible) {
       viteProcess.kill();
-      throw new Error(`Frontend server did not become accessible within ${frontendMaxWait}ms`);
+      throw new Error(`Frontend server did not become accessible at ${frontendUrl} within ${frontendMaxWait}ms`);
     }
+    
+    await writeLog(logFileName, `Frontend server accessible at ${frontendUrl}`, 'TEST');
     
     // Give React a moment to hydrate
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    await use(viteProcess);
+    await use({ process: viteProcess, port: frontendPort, url: frontendUrl });
 
     // Cleanup - kill Vite process and all its children
     await writeLog(logFileName, 'Stopping Vite dev server', 'FRONTEND');
     try {
-      if (viteProcess.pid && !viteProcess.killed) {
+      if (viteProcess.process.pid && !viteProcess.process.killed) {
         if (process.platform !== 'win32') {
           try {
-            process.kill(-viteProcess.pid, 'SIGTERM');
+            process.kill(-viteProcess.process.pid, 'SIGTERM');
             await new Promise(resolve => setTimeout(resolve, 2000));
             try {
-              process.kill(-viteProcess.pid, 'SIGKILL');
+              process.kill(-viteProcess.process.pid, 'SIGKILL');
             } catch (e) {
               // Process group might already be dead
             }
           } catch (e) {
-            viteProcess.kill('SIGTERM');
+            viteProcess.process.kill('SIGTERM');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            if (!viteProcess.killed) {
-              viteProcess.kill('SIGKILL');
+            if (!viteProcess.process.killed) {
+              viteProcess.process.kill('SIGKILL');
             }
           }
         } else {
-          viteProcess.kill('SIGTERM');
+          viteProcess.process.kill('SIGTERM');
           await new Promise(resolve => setTimeout(resolve, 1000));
-          if (!viteProcess.killed) {
-            viteProcess.kill('SIGKILL');
+          if (!viteProcess.process.killed) {
+            viteProcess.process.kill('SIGKILL');
           }
         }
       }
@@ -294,39 +332,23 @@ export const test = base.extend<TestFixtures>({
     // Generate random credentials
     const username = `test-user-${Math.random().toString(36).substring(7)}`;
     const password = `test-pass-${Math.random().toString(36).substring(7)}`;
-    
-    // Create user via REST API
-    await writeLog(logFileName, `Creating user via API: ${username}`, 'TEST');
-    const userResult = await makeUser(backendApp.address, username, password);
-    
-    if (!userResult.success) {
-      const errorMsg = `Failed to create user: ${userResult.error?.error || 'Unknown error'}`;
-      await writeLog(logFileName, `ERROR: ${errorMsg}`, 'TEST');
-      throw new Error(errorMsg);
+
+    try {
+      await makeUser(backendApp.address, username, password);
+    } catch (error) {
+      await writeLog(logFileName, `ERROR: Failed to create user: ${error}`, 'TEST');
+      throw error;
     }
     
     await writeLog(logFileName, `User created successfully: ${username}`, 'TEST');
 
     // Login via the browser
-    await writeLog(logFileName, 'Starting browser login...', 'TEST');
-    await page.goto('http://localhost:3000/login');
-    await writeLog(logFileName, `Filling login form with username: ${username}`, 'TEST');
-    await page.fill('input[name="username"], input[placeholder="Enter Username"]', username);
-    await page.fill('input[type="password"]', password);
-    
-    // Wait for login response and navigation
-    await writeLog(logFileName, 'Submitting login form...', 'TEST');
-    const [response] = await Promise.all([
-      page.waitForResponse(response => response.url().includes('/login') && response.request().method() === 'POST'),
-      page.click('button[type="submit"]'),
-    ]);
-    
-    const loginStatus = response.status();
-    const loginBody = await response.text();
-    await writeLog(logFileName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
-    
-    if (!response.ok()) {
-      throw new Error(`Login failed with status ${loginStatus}: ${loginBody}`);
+    try {
+      await loginSimple(username, password, logFileName, frontendServer, page);
+      // await loginAsUser(page, username, password, backendApp.address, logFileName);
+    } catch (error) {
+      await writeLog(logFileName, `ERROR: Failed to login: ${error}`, 'TEST');
+      throw error;
     }
     
     // Wait for successful login (redirect to dashboard)
