@@ -13,7 +13,7 @@ const sleep = promisify(setTimeout);
 // Helper to write to log file (fire-and-forget to avoid blocking)
 // source: TEST (Playwright test), FRONTEND (Vite server), BACKEND (test server)
 function writeLog(testName: string, message: string, source: 'TEST' | 'FRONTEND' | 'BACKEND' = 'TEST') {
-  const logsDir = path.join(__dirname, 'logs', 'e2e');
+  const logsDir = path.join(__dirname, 'logs', 'e2e-telemetry');
   
   const sanitizedTestName = testName
     .replace(/\s+/g, '_')
@@ -47,7 +47,7 @@ export interface TestUser {
 
 /**
  * Spawn a backend test server
- * @param testName - Name for the test
+ * @param testName - Name for the test (used for database naming, may have e2e- prefix)
  * 
  * Note: Users should be created via the makeUser() helper function, not by the backend spawn.
  * This ensures users are created through the actual /initial_password API endpoint.
@@ -55,14 +55,17 @@ export interface TestUser {
 export async function spawnTestApp(testName: string): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
   
-  writeLog(testName, `Starting test app spawn: testName=${testName}`, 'BACKEND');
+  // Strip e2e- prefix for log file naming if present
+  const logFileName = testName.replace(/^e2e-/, '');
+  
+  writeLog(logFileName, `Starting test app spawn: testName=${testName}`, 'BACKEND');
   
   // Check if binary exists, if not build it
   const binaryPath = path.join(projectRoot, 'target', 'release', 'spawn_test_server');
   const binaryExists = await fs.promises.access(binaryPath).then(() => true).catch(() => false);
   
   if (!binaryExists) {
-    await writeLog(testName, 'Binary not found, building spawn_test_server...', 'BACKEND');
+    await writeLog(logFileName, 'Binary not found, building spawn_test_server...', 'BACKEND');
     const cargoBuild = spawn('cargo', ['build', '--bin', 'spawn_test_server', '--features', 'e2e-tests', '--release'], {
       cwd: projectRoot,
       stdio: 'pipe',
@@ -79,20 +82,20 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     await new Promise<void>((resolve, reject) => {
       cargoBuild.on('close', async (code) => {
         if (code === 0) {
-          await writeLog(testName, 'Binary build successful', 'BACKEND');
+          await writeLog(logFileName, 'Binary build successful', 'BACKEND');
           resolve();
         } else {
-          await writeLog(testName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
+          await writeLog(logFileName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
           reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
         }
       });
       cargoBuild.on('error', async (err) => {
-        await writeLog(testName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
+        await writeLog(logFileName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
         reject(new Error(`Failed to start cargo build: ${err.message}`));
       });
     });
   } else {
-    writeLog(testName, 'Using existing binary', 'BACKEND');
+    writeLog(logFileName, 'Using existing binary', 'BACKEND');
   }
   
   // Log file will be created automatically by writeLog function
@@ -118,14 +121,14 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     const dataStr = data.toString();
     output += dataStr;
     // Only log via writeLog - no direct file writing
-    writeLog(testName, `${dataStr}`, 'BACKEND');
+    writeLog(logFileName, `${dataStr}`, 'BACKEND');
   });
   
   // Write stderr to log file
   testServerProcess.stderr?.on('data', async (data) => {
     const dataStr = data.toString();
     // Only log via writeLog - no direct file writing
-    writeLog(testName, `${dataStr}`, 'BACKEND');
+    writeLog(logFileName, `${dataStr}`, 'BACKEND');
   });
 
   // Wait for the server to output the port information
@@ -164,20 +167,20 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
 
   if (!serverInfo) {
     testServerProcess.kill();
-    await writeLog(testName, `ERROR: Failed to start test server: no port information received. Output: ${output}`, 'BACKEND');
+    await writeLog(logFileName, `ERROR: Failed to start test server: no port information received. Output: ${output}`, 'BACKEND');
     throw new Error(`Failed to start test server: no port information received`);
   }
 
-  await writeLog(testName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
+  await writeLog(logFileName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
 
   // Wait for the backend server to be ready by checking health endpoint
   try {
-    await writeLog(testName, 'Waiting for backend to be ready...', 'BACKEND');
+    await writeLog(logFileName, 'Waiting for backend to be ready...', 'BACKEND');
     await waitForBackendReady(serverInfo.address, 30000);
-    await writeLog(testName, 'Backend is ready', 'BACKEND');
+    await writeLog(logFileName, 'Backend is ready', 'BACKEND');
   } catch (error) {
     testServerProcess.kill();
-    await writeLog(testName, `ERROR: Backend server did not become ready: ${error}`, 'BACKEND');
+    await writeLog(logFileName, `ERROR: Backend server did not become ready: ${error}`, 'BACKEND');
     throw new Error(`Backend server did not become ready: ${error}`);
   }
 
@@ -198,9 +201,10 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
  * Stop a test app
  */
 export async function stopTestApp(app: TestApp): Promise<void> {
-  // Write final log entry
+  // Write final log entry - strip e2e- prefix for log file naming
   if (app.testName) {
-    writeLog(app.testName, 'Test app stopped', 'BACKEND'); // Fire-and-forget
+    const logFileName = app.testName.replace(/^e2e-/, '');
+    writeLog(logFileName, 'Test app stopped', 'BACKEND'); // Fire-and-forget
   }
   
   if (app.process && !app.process.killed && app.process.pid) {
