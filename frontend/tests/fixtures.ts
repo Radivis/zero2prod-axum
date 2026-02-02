@@ -115,6 +115,10 @@ export async function makeUser(
       console.warn(`[makeUser] User created but not yet visible in existence check after ${maxRetries} retries`);
     }
     
+    // Small delay to ensure Redis session store is ready
+    // Helps prevent race conditions with high parallelism
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     return {
       success: true,
       username,

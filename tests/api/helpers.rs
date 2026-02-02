@@ -44,7 +44,7 @@ pub fn test_writer() -> NonBlocking {
     let test_name = std::env::args()
         .skip_while(|arg| arg != "--exact")
         .nth(1) // we need the first arg exactly after "--exact"
-        .and_then(|arg| Some(arg.replace("::", "-").to_string()))
+        .map(|arg| arg.replace("::", "-").to_string())
         .unwrap_or("unlabeled_test".into())
         .replace(' ', "_");
 

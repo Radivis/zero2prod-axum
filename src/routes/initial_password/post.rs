@@ -1,12 +1,10 @@
-use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
 use axum::extract::{Json, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect};
+use axum::response::IntoResponse;
 use secrecy::{ExposeSecret, Secret};
-use tower_sessions::Session;
 
 #[derive(serde::Deserialize)]
 pub struct InitialPasswordFormData {
@@ -58,9 +56,8 @@ impl IntoResponse for InitialPasswordError {
     }
 }
 
-#[tracing::instrument(skip(form, state, session))]
+#[tracing::instrument(skip(form, state))]
 pub async fn create_initial_password(
-    session: Session,
     State(state): State<AppState>,
     Json(form): Json<InitialPasswordFormData>,
 ) -> Result<impl IntoResponse, InitialPasswordError> {

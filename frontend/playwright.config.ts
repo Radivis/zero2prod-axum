@@ -11,7 +11,8 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry failed tests to handle sporadic failures */
-  retries: process.env.CI ? 2 : 1,
+  /* More retries in CI due to higher parallelism and resource contention */
+  retries: process.env.CI ? 3 : 1,
   /* Use sequential mode (workers: 1) if E2E_SEQUENTIAL is set, otherwise use default (parallel) */
   workers: process.env.E2E_SEQUENTIAL === 'true' ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */

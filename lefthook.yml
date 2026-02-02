@@ -37,6 +37,6 @@ pre-commit:
 post-commit:
   commands:
     e2e-tests:
-      run: cd frontend && npx playwright test
-      # Playwright auto-opens report on failure (see playwright.config.ts)
+      run: ./scripts/run-e2e-background.sh &
+      # Runs E2E tests in background, opens report on failure
       priority: 1
