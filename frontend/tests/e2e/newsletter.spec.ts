@@ -14,34 +14,38 @@ test.describe('Newsletter', () => {
   });
 
   test('successful newsletter submission', async ({ authenticatedPage }) => {
-    await authenticatedPage.goto('/admin/newsletters');
+    const { page } = authenticatedPage;
+    
+    await page.goto('/admin/newsletters');
     
     // Fill in the newsletter form using ARIA labels
-    await authenticatedPage.getByLabel('Newsletter title').waitFor({ state: 'visible' });
+    await page.getByLabel('Newsletter title').waitFor({ state: 'visible' });
     
-    await authenticatedPage.getByLabel('Newsletter title').fill('Test Newsletter');
-    await authenticatedPage.getByLabel('HTML content').fill('<p>Test HTML content</p>');
-    await authenticatedPage.getByLabel('Text content').fill('Test text content');
+    await page.getByLabel('Newsletter title').fill('Test Newsletter');
+    await page.getByLabel('HTML content').fill('<p>Test HTML content</p>');
+    await page.getByLabel('Text content').fill('Test text content');
     
     // Submit the form
-    await authenticatedPage.getByRole('button', { name: 'Send newsletter' }).click();
+    await page.getByRole('button', { name: 'Send newsletter' }).click();
     
     // Wait for success message
-    await expect(authenticatedPage.locator('text=/newsletter issue has been accepted/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/newsletter issue has been accepted/i')).toBeVisible({ timeout: 10000 });
     
     // Form should be reset (title should be empty)
-    const titleValue = await authenticatedPage.getByLabel('Newsletter title').inputValue();
+    const titleValue = await page.getByLabel('Newsletter title').inputValue();
     expect(titleValue).toBe('');
   });
 
   test('shows validation error for missing fields', async ({ authenticatedPage }) => {
-    await authenticatedPage.goto('/admin/newsletters');
+    const { page } = authenticatedPage;
+    
+    await page.goto('/admin/newsletters');
     
     // Try to submit without filling required fields
-    await authenticatedPage.getByRole('button', { name: 'Send newsletter' }).click();
+    await page.getByRole('button', { name: 'Send newsletter' }).click();
     
     // HTML5 validation should prevent submission, or we should see an error
     // Check if form is still visible (not submitted)
-    await expect(authenticatedPage.locator('form')).toBeVisible();
+    await expect(page.locator('form')).toBeVisible();
   });
 });

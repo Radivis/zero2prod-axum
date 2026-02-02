@@ -180,11 +180,18 @@ export interface FrontendServer {
   url: string;
 }
 
+// Interface for authenticated page with credentials
+export interface AuthenticatedPageWithCredentials {
+  page: Page;
+  username: string;
+  password: string;
+}
+
 // Extend the base test with our custom fixtures
 interface TestFixtures {
   backendApp: TestApp;
   frontendServer: FrontendServer;
-  authenticatedPage: Page;
+  authenticatedPage: AuthenticatedPageWithCredentials;
 }
 
 export const test = base.extend<TestFixtures>({
@@ -412,7 +419,8 @@ export const test = base.extend<TestFixtures>({
     await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
     await writeLog(logFileName, 'Browser login successful', 'TEST');
 
-    await use(page);
+    // Pass page along with credentials so tests can use them
+    await use({ page, username, password });
     
     // Cleanup
     await context.close();
