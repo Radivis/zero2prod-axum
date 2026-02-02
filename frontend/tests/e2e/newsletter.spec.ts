@@ -6,7 +6,7 @@ test.describe('Newsletter', () => {
     await makeUser(backendApp.address, 'test-user', 'test-password-12345');
     
     // Try to access newsletter page without authentication
-    await page.goto('/admin/newsletters');
+    await page.goto(`${frontendServer.url}/admin/newsletters`);
     
     // Should redirect to login
     await page.waitForURL(/\/login/, { timeout: 10000 });
@@ -14,51 +14,23 @@ test.describe('Newsletter', () => {
   });
 
   test('successful newsletter submission', async ({ authenticatedPage }) => {
-    await page.goto('/admin/newsletters');
+    await authenticatedPage.goto('/admin/newsletters');
     
-    // Fill in the newsletter form
-    await authenticatedPage.waitForSelector('input[placeholder*="title"], input[label*="Title"]');
-    await authenticatedPage.fill('input[placeholder*="title"], label:has-text("Title") + * input, input:below(label:has-text("Title"))', 'Test Newsletter');
+    // Fill in the newsletter form using ARIA labels
+    await authenticatedPage.getByLabel('Newsletter title').waitFor({ state: 'visible' });
     
-    // Fill HTML content
-    const htmlContentArea = authenticatedPage.locator('textarea, input').filter({ hasText: /html/i }).or(authenticatedPage.locator('textarea[label*="HTML"]')).first();
-    if (await htmlContentArea.count() === 0) {
-      // Try finding by label
-      const htmlLabel = authenticatedPage.locator('label:has-text("HTML")');
-      if (await htmlLabel.count() > 0) {
-        await htmlLabel.locator('..').locator('textarea').fill('<p>Test HTML content</p>');
-      } else {
-        // Fallback: find all textareas and fill the first one
-        const textareas = authenticatedPage.locator('textarea');
-        await textareas.nth(0).fill('<p>Test HTML content</p>');
-      }
-    } else {
-      await htmlContentArea.fill('<p>Test HTML content</p>');
-    }
-    
-    // Fill text content
-    const textContentArea = authenticatedPage.locator('textarea, input').filter({ hasText: /text/i }).or(authenticatedPage.locator('textarea[label*="text"]')).first();
-    if (await textContentArea.count() === 0) {
-      const textLabel = authenticatedPage.locator('label:has-text("text")');
-      if (await textLabel.count() > 0) {
-        await textLabel.locator('..').locator('textarea').fill('Test text content');
-      } else {
-        const textareas = authenticatedPage.locator('textarea');
-        await textareas.nth(1).fill('Test text content');
-      }
-    } else {
-      await textContentArea.fill('Test text content');
-    }
+    await authenticatedPage.getByLabel('Newsletter title').fill('Test Newsletter');
+    await authenticatedPage.getByLabel('HTML content').fill('<p>Test HTML content</p>');
+    await authenticatedPage.getByLabel('Text content').fill('Test text content');
     
     // Submit the form
-    await authenticatedPage.click('button:has-text("Send newsletter"), button[type="submit"]');
+    await authenticatedPage.getByRole('button', { name: 'Send newsletter' }).click();
     
     // Wait for success message
     await expect(authenticatedPage.locator('text=/newsletter issue has been accepted/i')).toBeVisible({ timeout: 10000 });
     
     // Form should be reset (title should be empty)
-    const titleInput = authenticatedPage.locator('input[placeholder*="title"], label:has-text("Title") + * input').first();
-    const titleValue = await titleInput.inputValue();
+    const titleValue = await authenticatedPage.getByLabel('Newsletter title').inputValue();
     expect(titleValue).toBe('');
   });
 
@@ -66,7 +38,7 @@ test.describe('Newsletter', () => {
     await authenticatedPage.goto('/admin/newsletters');
     
     // Try to submit without filling required fields
-    await authenticatedPage.click('button:has-text("Send newsletter"), button[type="submit"]');
+    await authenticatedPage.getByRole('button', { name: 'Send newsletter' }).click();
     
     // HTML5 validation should prevent submission, or we should see an error
     // Check if form is still visible (not submitted)

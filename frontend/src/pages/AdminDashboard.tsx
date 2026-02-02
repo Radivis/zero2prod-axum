@@ -98,12 +98,12 @@ function AdminDashboard() {
         </Typography>
         <List>
           <ListItem disablePadding>
-            <ListItemButton component={Link} to="/admin/password">
+            <ListItemButton component={Link} to="/admin/password" aria-label="Change password">
               Change password
             </ListItemButton>
           </ListItem>
           <ListItem disablePadding>
-            <ListItemButton component={Link} to="/admin/newsletters">
+            <ListItemButton component={Link} to="/admin/newsletters" aria-label="Send newsletter">
               Send a newsletter
             </ListItemButton>
           </ListItem>
@@ -114,6 +114,7 @@ function AdminDashboard() {
               onClick={handleLogout}
               disabled={logoutMutation.isPending}
               sx={{ mt: 2 }}
+              aria-label="Logout"
             >
               {logoutMutation.isPending ? <CircularProgress size={24} /> : 'Logout'}
             </Button>

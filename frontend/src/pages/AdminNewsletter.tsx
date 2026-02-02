@@ -75,6 +75,7 @@ function AdminNewsletter() {
             onChange={(e) => setTitle(e.target.value)}
             margin="normal"
             required
+            inputProps={{ 'aria-label': 'Newsletter title' }}
           />
           <TextField
             fullWidth
@@ -86,6 +87,7 @@ function AdminNewsletter() {
             multiline
             rows={20}
             required
+            inputProps={{ 'aria-label': 'HTML content' }}
           />
           <TextField
             fullWidth
@@ -97,12 +99,14 @@ function AdminNewsletter() {
             multiline
             rows={20}
             required
+            inputProps={{ 'aria-label': 'Text content' }}
           />
           <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
             <Button
               type="submit"
               variant="contained"
               disabled={newsletterMutation.isPending}
+              aria-label="Send newsletter"
             >
               {newsletterMutation.isPending ? <CircularProgress size={24} /> : 'Send newsletter'}
             </Button>
@@ -110,6 +114,7 @@ function AdminNewsletter() {
               component={Link}
               to="/admin/dashboard"
               variant="outlined"
+              aria-label="Back to dashboard"
             >
               ← Back
             </Button>

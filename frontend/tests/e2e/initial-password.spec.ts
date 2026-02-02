@@ -2,17 +2,16 @@ import { test, expect } from '../fixtures';
 
 test.describe('Initial Password', () => {
   test('creates initial admin user successfully', async ({ page, backendApp, frontendServer }) => {
-    await page.goto('/initial_password');
+    await page.goto(`${frontendServer.url}/initial_password`);
     
     // Fill in password form
-    await page.waitForSelector('input[type="password"]');
-    const passwordInputs = await page.locator('input[type="password"]').all();
+    await page.getByLabel('New password').waitFor({ state: 'visible' });
     
-    await passwordInputs[0].fill('testpassword123456');
-    await passwordInputs[1].fill('testpassword123456');
+    await page.getByLabel('New password').fill('testpassword123456');
+    await page.getByLabel('Confirm password').fill('testpassword123456');
     
     // Submit the form
-    await page.click('button[type="submit"]');
+    await page.getByRole('button', { name: 'Create account' }).click();
     
     // Should redirect to login page
     await page.waitForURL(/\/login/, { timeout: 10000 });
@@ -20,15 +19,14 @@ test.describe('Initial Password', () => {
   });
 
   test('shows error when passwords do not match', async ({ page, backendApp, frontendServer }) => {
-    await page.goto('/initial_password');
+    await page.goto(`${frontendServer.url}/initial_password`);
     
-    await page.waitForSelector('input[type="password"]');
-    const passwordInputs = await page.locator('input[type="password"]').all();
+    await page.getByLabel('New password').waitFor({ state: 'visible' });
     
-    await passwordInputs[0].fill('testpassword123456');
-    await passwordInputs[1].fill('differentpassword123456');
+    await page.getByLabel('New password').fill('testpassword123456');
+    await page.getByLabel('Confirm password').fill('differentpassword123456');
     
-    await page.click('button[type="submit"]');
+    await page.getByRole('button', { name: 'Create account' }).click();
     
     // Should show validation error
     await expect(page.locator('text=/Passwords do not match/i')).toBeVisible({ timeout: 5000 });
@@ -38,31 +36,29 @@ test.describe('Initial Password', () => {
   });
 
   test('shows error when password is too short', async ({ page, backendApp, frontendServer }) => {
-    await page.goto('/initial_password');
+    await page.goto(`${frontendServer.url}/initial_password`);
     
-    await page.waitForSelector('input[type="password"]');
-    const passwordInputs = await page.locator('input[type="password"]').all();
+    await page.getByLabel('New password').waitFor({ state: 'visible' });
     
-    await passwordInputs[0].fill('short');
-    await passwordInputs[1].fill('short');
+    await page.getByLabel('New password').fill('short');
+    await page.getByLabel('Confirm password').fill('short');
     
-    await page.click('button[type="submit"]');
+    await page.getByRole('button', { name: 'Create account' }).click();
     
     // Should show validation error
     await expect(page.locator('text=/at least 12 characters/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('shows error when password is too long', async ({ page, backendApp, frontendServer }) => {
-    await page.goto('/initial_password');
+    await page.goto(`${frontendServer.url}/initial_password`);
     
-    await page.waitForSelector('input[type="password"]');
-    const passwordInputs = await page.locator('input[type="password"]').all();
+    await page.getByLabel('New password').waitFor({ state: 'visible' });
     
     const longPassword = 'a'.repeat(129);
-    await passwordInputs[0].fill(longPassword);
-    await passwordInputs[1].fill(longPassword);
+    await page.getByLabel('New password').fill(longPassword);
+    await page.getByLabel('Confirm password').fill(longPassword);
     
-    await page.click('button[type="submit"]');
+    await page.getByRole('button', { name: 'Create account' }).click();
     
     // Should show validation error
     await expect(page.locator('text=/not have more than 128 characters/i')).toBeVisible({ timeout: 5000 });

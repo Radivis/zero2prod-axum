@@ -95,6 +95,7 @@ function AdminPassword() {
             margin="normal"
             required
             autoComplete="current-password"
+            inputProps={{ 'aria-label': 'Current password' }}
           />
           <TextField
             fullWidth
@@ -106,6 +107,7 @@ function AdminPassword() {
             margin="normal"
             required
             autoComplete="new-password"
+            inputProps={{ 'aria-label': 'New password' }}
           />
           <TextField
             fullWidth
@@ -117,12 +119,14 @@ function AdminPassword() {
             margin="normal"
             required
             autoComplete="new-password"
+            inputProps={{ 'aria-label': 'Confirm new password' }}
           />
           <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
             <Button
               type="submit"
               variant="contained"
               disabled={changePasswordMutation.isPending}
+              aria-label="Change password"
             >
               {changePasswordMutation.isPending ? <CircularProgress size={24} /> : 'Change password'}
             </Button>
@@ -130,6 +134,7 @@ function AdminPassword() {
               component={Link}
               to="/admin/dashboard"
               variant="outlined"
+              aria-label="Back to dashboard"
             >
               ← Back
             </Button>

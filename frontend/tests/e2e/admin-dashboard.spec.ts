@@ -6,7 +6,7 @@ test.describe('Admin Dashboard', () => {
     await makeUser(backendApp.address, 'test-user', 'test-password-12345');
     
     // Try to access admin dashboard without logging in
-    await page.goto('/admin/dashboard');
+    await page.goto(`${frontendServer.url}/admin/dashboard`);
     
     // Should redirect to login
     await page.waitForURL(/\/login/, { timeout: 10000 });
@@ -22,7 +22,7 @@ test.describe('Admin Dashboard', () => {
 
   test('logout functionality works', async ({ authenticatedPage }) => {
     // Click logout button
-    await authenticatedPage.click('button:has-text("Logout")');
+    await authenticatedPage.getByRole('button', { name: 'Logout' }).click();
     
     // Should redirect to login page
     await authenticatedPage.waitForURL(/\/login/, { timeout: 10000 });
@@ -35,7 +35,7 @@ test.describe('Admin Dashboard', () => {
 
   test('navigation links work', async ({ authenticatedPage }) => {
     // Click on "Change password" link
-    await authenticatedPage.click('text=Change password');
+    await authenticatedPage.getByRole('link', { name: 'Change password' }).click();
     await authenticatedPage.waitForURL(/\/admin\/password/, { timeout: 5000 });
     expect(authenticatedPage.url()).toContain('/admin/password');
     
@@ -43,7 +43,7 @@ test.describe('Admin Dashboard', () => {
     await authenticatedPage.goto('/admin/dashboard');
     
     // Click on "Send a newsletter" link
-    await authenticatedPage.click('text=Send a newsletter');
+    await authenticatedPage.getByRole('link', { name: 'Send newsletter' }).click();
     await authenticatedPage.waitForURL(/\/admin\/newsletters/, { timeout: 5000 });
     expect(authenticatedPage.url()).toContain('/admin/newsletters');
   });

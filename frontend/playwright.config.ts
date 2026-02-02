@@ -22,8 +22,8 @@ export default defineConfig({
   ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:3000',
+    /* Base URL - will be overridden by frontendServer fixture with dynamic port */
+    // baseURL: 'http://localhost:3000',  // Disabled - set dynamically in fixtures
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     /* Run in headed mode if HEADED environment variable is set */

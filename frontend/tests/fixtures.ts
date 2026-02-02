@@ -84,6 +84,37 @@ export async function makeUser(
     }
 
     const data = await response.json();
+    
+    // Verify the user is actually visible in the database before returning
+    // This prevents race conditions where the frontend checks for user existence
+    // before the database transaction is fully committed
+    const maxRetries = 10;
+    const retryDelay = 200; // ms
+    let userVerified = false;
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const existsResponse = await fetch(`${backendAddress}/api/users/exists`);
+        if (existsResponse.ok) {
+          const existsData = await existsResponse.json();
+          if (existsData.users_exist) {
+            userVerified = true;
+            break;
+          }
+        }
+      } catch (e) {
+        // Continue trying
+      }
+      
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+    
+    if (!userVerified) {
+      console.warn(`[makeUser] User created but not yet visible in existence check after ${maxRetries} retries`);
+    }
+    
     return {
       success: true,
       username,
@@ -116,24 +147,30 @@ export async function loginSimple(
     await writeLog(logFileName, 'Starting browser login...', 'TEST');
     await page.goto(`${frontendServer.url}/login`);
     await writeLog(logFileName, `Filling login form with username: ${username}`, 'TEST');
-    await page.fill('input[name="username"]', username);
-    await page.fill('input[type="password"]', password);
+    await page.getByLabel('Username').fill(username);
+    await page.getByLabel('Password').fill(password);
     
     // Wait for login response and navigation
     await writeLog(logFileName, 'Submitting login form...', 'TEST');
     const [response] = await Promise.all([
       page.waitForResponse(response => response.url().includes('/login') && response.request().method() === 'POST'),
-      page.click('button[type="submit"]'),
+      page.getByLabel('Login').click(),
     ]);
     
     const loginStatus = response.status();
-    const loginBody = await response.text();
-    await writeLog(logFileName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
     
-    if (!response.ok()) {
-      throw new Error(`Login failed with status ${loginStatus}: ${loginBody}`);
+    if (loginStatus !== 200) {
+      let errorMessage = `Login failed with status ${loginStatus}`;
+      try {
+        const loginBody = await response.json();
+        errorMessage += `: ${loginBody.error}`;
+      } catch {
+        errorMessage += `: Cannot parse login response body`;
+      }
+      throw new Error(errorMessage);
     }
-
+    const loginBody = await response.json();
+    writeLog(logFileName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
 }
 
 // Frontend server type
@@ -217,8 +254,11 @@ export const test = base.extend<TestFixtures>({
     // Wait for Vite to be ready and extract the port
     let viteReady = false;
     let viteError = '';
-    let frontendPort = 3000; // Default, but will be extracted from output
+    let frontendPort: number | null = null; // Will be extracted from output
     let fullOutput = '';
+    
+    // Helper function to strip ANSI escape codes
+    const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
     
     viteProcess.stdout?.on('data', (data) => {
       const output = data.toString();
@@ -229,13 +269,15 @@ export const test = base.extend<TestFixtures>({
       }
       
       // Extract port from Vite output like "➜  Local:   http://localhost:3003/"
-      const portMatch = output.match(/Local:\s+http:\/\/localhost:(\d+)/);
+      // Strip ANSI color codes first to handle colored terminal output
+      const cleanOutput = stripAnsi(output);
+      const portMatch = cleanOutput.match(/Local:\s+http:\/\/localhost:(\d+)/);
       if (portMatch) {
         frontendPort = parseInt(portMatch[1], 10);
         writeLog(logFileName, `Detected frontend port: ${frontendPort}`, 'TEST');
       }
       
-      if (output.includes('Local:') || output.includes('ready') || output.includes('VITE')) {
+      if (cleanOutput.includes('Local:') || cleanOutput.includes('ready') || cleanOutput.includes('VITE')) {
         viteReady = true;
       }
     });
@@ -249,11 +291,11 @@ export const test = base.extend<TestFixtures>({
       }
     });
 
-    // Wait up to 30 seconds for Vite to start
-    const maxWait = 30000;
+    // Wait up to 10 seconds for Vite to start AND port to be detected
+    const maxWait = 10000;
     const startTime = Date.now();
-    while (!viteReady && Date.now() - startTime < maxWait) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    while ((!viteReady || frontendPort === null) && Date.now() - startTime < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     if (!viteReady) {
@@ -261,10 +303,15 @@ export const test = base.extend<TestFixtures>({
       throw new Error(`Vite server did not start in time. Stderr: ${viteError}`);
     }
 
+    if (frontendPort === null) {
+      viteProcess.kill();
+      throw new Error(`Failed to detect frontend port within ${maxWait}ms. Output: ${fullOutput}`);
+    }
+
     // Wait for frontend to actually be accessible
     let frontendAccessible = false;
     const frontendCheckStart = Date.now();
-    const frontendMaxWait = 10000;
+    const frontendMaxWait = 12000;
     const frontendUrl = `http://localhost:${frontendPort}`;
     
     await writeLog(logFileName, `Checking frontend accessibility at ${frontendUrl}`, 'TEST');
@@ -325,9 +372,16 @@ export const test = base.extend<TestFixtures>({
   },
 
   // Authenticated page fixture - creates a user and logs in
-  authenticatedPage: async ({ page, backendApp, frontendServer }, use, testInfo) => {
+  authenticatedPage: async ({ browser, backendApp, frontendServer }, use, testInfo) => {
     // Log file name without e2e- prefix
     const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    
+    // Create a new page with baseURL set to the dynamic frontend URL
+    // This allows tests to use relative URLs like goto('/admin/dashboard')
+    const context = await browser.newContext({
+      baseURL: frontendServer.url,
+    });
+    const page = await context.newPage();
     
     // Generate random credentials
     const username = `test-user-${Math.random().toString(36).substring(7)}`;
@@ -337,6 +391,7 @@ export const test = base.extend<TestFixtures>({
       await makeUser(backendApp.address, username, password);
     } catch (error) {
       await writeLog(logFileName, `ERROR: Failed to create user: ${error}`, 'TEST');
+      await context.close();
       throw error;
     }
     
@@ -348,6 +403,7 @@ export const test = base.extend<TestFixtures>({
       // await loginAsUser(page, username, password, backendApp.address, logFileName);
     } catch (error) {
       await writeLog(logFileName, `ERROR: Failed to login: ${error}`, 'TEST');
+      await context.close();
       throw error;
     }
     
@@ -357,6 +413,9 @@ export const test = base.extend<TestFixtures>({
     await writeLog(logFileName, 'Browser login successful', 'TEST');
 
     await use(page);
+    
+    // Cleanup
+    await context.close();
   },
 });
 

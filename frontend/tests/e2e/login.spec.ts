@@ -12,19 +12,19 @@ test.describe('Login', () => {
     }
     
     // Navigate to login page
-    await page.goto('/login');
+    await page.goto(`${frontendServer.url}/login`);
     
     // Wait for the login form to be visible
-    await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible', timeout: 10000 });
+    await page.getByLabel('Username').waitFor({ state: 'visible', timeout: 10000 });
     
     // Fill in credentials
-    await page.fill('input[type="text"], input[name="username"]', username);
-    await page.fill('input[type="password"]', password);
+    await page.getByLabel('Username').fill(username);
+    await page.getByLabel('Password').fill(password);
     
     // Submit the form and wait for navigation
     await Promise.all([
       page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 }),
-      page.click('button[type="submit"]'),
+      page.getByRole('button', { name: 'Login' }).click(),
     ]);
     
     // Verify we're on the dashboard
@@ -41,17 +41,17 @@ test.describe('Login', () => {
       throw new Error(`Failed to create test user: ${userResult.error?.error}`);
     }
     
-    await page.goto('/login');
+    await page.goto(`${frontendServer.url}/login`);
     
     // Wait for the login form to be visible
-    await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible' });
+    await page.getByLabel('Username').waitFor({ state: 'visible' });
     
     // Verify we're on login page
     expect(page.url()).toContain('/login');
     
-    await page.fill('input[type="text"], input[name="username"]', 'invalid-user');
-    await page.fill('input[type="password"]', 'invalid-password');
-    await page.click('button[type="submit"]');
+    await page.getByLabel('Username').fill('invalid-user');
+    await page.getByLabel('Password').fill('invalid-password');
+    await page.getByRole('button', { name: 'Login' }).click();
     
     // Wait for error message
     await expect(page.locator('text=/Authentication failed/i')).toBeVisible({ timeout: 10000 });
@@ -62,7 +62,7 @@ test.describe('Login', () => {
 
   test('redirects to initial password when no users exist', async ({ page, backendApp, frontendServer }) => {
     // Ensure no users exist (fresh database)
-    await page.goto('/login');
+    await page.goto(`${frontendServer.url}/login`);
     
     // Should redirect to initial password page
     await page.waitForURL(/\/initial_password/, { timeout: 10000 });

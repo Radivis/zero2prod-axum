@@ -80,6 +80,7 @@ function InitialPassword() {
               onChange={(e) => setUsername(e.target.value)}
               margin="normal"
               required
+              inputProps={{ 'aria-label': 'Username' }}
           />
           <TextField
             fullWidth
@@ -91,6 +92,7 @@ function InitialPassword() {
             margin="normal"
             required
             autoComplete="new-password"
+            inputProps={{ 'aria-label': 'New password' }}
           />
           <TextField
             fullWidth
@@ -102,6 +104,7 @@ function InitialPassword() {
             margin="normal"
             required
             autoComplete="new-password"
+            inputProps={{ 'aria-label': 'Confirm password' }}
           />
           <Button
             type="submit"
@@ -109,6 +112,7 @@ function InitialPassword() {
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
             disabled={initialPasswordMutation.isPending}
+            aria-label="Create account"
           >
             {initialPasswordMutation.isPending ? <CircularProgress size={24} /> : 'Create Admin User'}
           </Button>

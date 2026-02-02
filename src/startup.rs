@@ -89,8 +89,28 @@ impl Application {
         };
 
         // Set up RedisStore with fred (compatible with both Redis and Valkey)
+        // For E2E tests, use a unique Redis database based on the database name
+        // This prevents session conflicts between parallel tests
         let redis_url = configuration.redis_uri.expose_secret();
-        let redis_config = Config::from_url(redis_url.as_str())
+        let redis_url_with_db = if configuration
+            .database
+            .database_name
+            .starts_with("test-e2e-")
+        {
+            // Hash the database name to get a Redis DB index (0-15)
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            configuration.database.database_name.hash(&mut hasher);
+            let db_index = (hasher.finish() % 16) as u8; // Redis has 16 databases (0-15)
+
+            // Append database index to Redis URL
+            format!("{}/{}", redis_url.trim_end_matches('/'), db_index)
+        } else {
+            redis_url.to_string()
+        };
+
+        let redis_config = Config::from_url(redis_url_with_db.as_str())
             .map_err(|e| std::io::Error::other(format!("Invalid Redis URL: {}", e)))?;
 
         let pool = Pool::new(redis_config, None, None, None, 6)

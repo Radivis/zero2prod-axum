@@ -117,6 +117,7 @@ function Login() {
             margin="normal"
             required
             autoComplete="username"
+            inputProps={{ 'aria-label': 'Username' }}
           />
           <TextField
             fullWidth
@@ -128,6 +129,7 @@ function Login() {
             margin="normal"
             required
             autoComplete="current-password"
+            inputProps={{ 'aria-label': 'Password' }}
           />
           <Button
             type="submit"
@@ -135,6 +137,7 @@ function Login() {
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
             disabled={loginMutation.isPending}
+            aria-label="Login"
           >
             {loginMutation.isPending ? <CircularProgress size={24} /> : 'Login'}
           </Button>
