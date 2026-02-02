@@ -73,7 +73,7 @@ function AdminPassword() {
         </Typography>
         {(validationError || changePasswordMutation.isError) && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {validationError ||
+            {validationError ? validationError :
               (changePasswordMutation.error instanceof Error
                 ? changePasswordMutation.error.message
                 : 'Failed to change password')}

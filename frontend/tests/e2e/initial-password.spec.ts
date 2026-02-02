@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Initial Password', () => {
-  test('creates initial admin user successfully', async ({ page, backendApp, frontendServer }) => {
+  test('creates initial admin user successfully', async ({ page, frontendServer }) => {
     await page.goto(`${frontendServer.url}/initial_password`);
     
     // Fill in password form
@@ -18,7 +18,7 @@ test.describe('Initial Password', () => {
     expect(page.url()).toContain('/login');
   });
 
-  test('shows error when passwords do not match', async ({ page, backendApp, frontendServer }) => {
+  test('shows error when passwords do not match', async ({ page, frontendServer }) => {
     await page.goto(`${frontendServer.url}/initial_password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
@@ -35,7 +35,7 @@ test.describe('Initial Password', () => {
     expect(page.url()).toContain('/initial_password');
   });
 
-  test('shows error when password is too short', async ({ page, backendApp, frontendServer }) => {
+  test('shows error when password is too short', async ({ page, frontendServer }) => {
     await page.goto(`${frontendServer.url}/initial_password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
@@ -49,7 +49,7 @@ test.describe('Initial Password', () => {
     await expect(page.locator('text=/at least 12 characters/i')).toBeVisible({ timeout: 5000 });
   });
 
-  test('shows error when password is too long', async ({ page, backendApp, frontendServer }) => {
+  test('shows error when password is too long', async ({ page, frontendServer }) => {
     await page.goto(`${frontendServer.url}/initial_password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
@@ -61,6 +61,6 @@ test.describe('Initial Password', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
     
     // Should show validation error
-    await expect(page.locator('text=/not have more than 128 characters/i')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=/must not exceed 128 characters/i')).toBeVisible({ timeout: 5000 });
   });
 });
