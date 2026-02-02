@@ -1,4 +1,4 @@
-use crate::helpers::{assert_is_redirect_to, spawn_app, spawn_app_container_with_user};
+use crate::helpers::{spawn_app, spawn_app_container_with_user};
 use crate::macros::function_name_macro::function_name;
 #[tokio::test]
 async fn create_initial_admin_when_no_users_exist() {
@@ -29,8 +29,11 @@ async fn create_initial_admin_when_no_users_exist() {
         }))
         .await;
 
-    // Assert - Should redirect to login
-    assert_is_redirect_to(&response, "/login");
+    // Assert - Should return success JSON
+    assert_eq!(response.status().as_u16(), 201);
+    let response_body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert!(response_body["success"].as_bool().unwrap());
+    assert_eq!(response_body["username"].as_str().unwrap(), "admin");
 
     // Verify admin user was created
     let user = sqlx::query!("SELECT username FROM users WHERE username = 'admin'")
@@ -210,7 +213,12 @@ async fn can_login_after_creating_initial_admin() {
             "password_confirmation": password
         }))
         .await;
-    assert_is_redirect_to(&create_response, "/login");
+    assert_eq!(create_response.status().as_u16(), 201);
+    let create_body: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    assert!(create_body["success"].as_bool().unwrap());
 
     // Act - Login with created admin
     let login_response = app
@@ -249,8 +257,11 @@ async fn password_with_spaces_is_valid_if_non_space_chars_meet_minimum() {
         }))
         .await;
 
-    // Assert - Should succeed
-    assert_is_redirect_to(&response, "/login");
+    // Assert - Should succeed with JSON response
+    assert_eq!(response.status().as_u16(), 201);
+    let response_body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert!(response_body["success"].as_bool().unwrap());
+    assert_eq!(response_body["username"].as_str().unwrap(), "admin");
 
     // Verify admin user was created
     let user = sqlx::query!("SELECT username FROM users WHERE username = 'admin'")

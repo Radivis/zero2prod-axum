@@ -422,11 +422,6 @@ pub async fn mount_mock_email_server(
     }
 }
 
-pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), location);
-}
-
 pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
     assert_eq!(response.status().as_u16(), expected_status);
     assert_eq!(
