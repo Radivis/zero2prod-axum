@@ -33,3 +33,10 @@ pre-commit:
       run: cargo clippy --workspace --all-targets
     test-compile:
       run: cargo test --workspace --no-run
+
+post-commit:
+  commands:
+    e2e-tests:
+      run: cd frontend && npx playwright test
+      # Playwright auto-opens report on failure (see playwright.config.ts)
+      priority: 1

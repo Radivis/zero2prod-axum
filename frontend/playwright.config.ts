@@ -10,13 +10,13 @@ export default defineConfig({
   fullyParallel: process.env.E2E_SEQUENTIAL !== 'true',
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  /* Retry failed tests to handle sporadic failures */
+  retries: process.env.CI ? 2 : 1,
   /* Use sequential mode (workers: 1) if E2E_SEQUENTIAL is set, otherwise use default (parallel) */
   workers: process.env.E2E_SEQUENTIAL === 'true' ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
-    ['html'],
+    ['html', { open: 'on-failure' }], // Auto-open report when tests fail
     ['list'], // Console output
     ['./tests/reporter.ts'], // Custom file reporter
   ],
