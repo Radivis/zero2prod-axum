@@ -1,5 +1,5 @@
-use crate::helpers::{spawn_app, spawn_app_container_with_user};
 use crate::macros::function_name_macro::function_name;
+use crate::test_app::{spawn_app, spawn_app_container_with_user};
 #[tokio::test]
 async fn create_initial_admin_when_no_users_exist() {
     // Arrange

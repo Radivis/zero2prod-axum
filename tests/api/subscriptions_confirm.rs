@@ -1,5 +1,6 @@
-use crate::helpers::{mount_mock_email_server, spawn_app};
+use crate::helpers::mount_mock_email_server;
 use crate::macros::function_name_macro::function_name;
+use crate::test_app::spawn_app;
 
 #[tokio::test]
 async fn confirmations_without_token_are_rejected_with_a_400() {

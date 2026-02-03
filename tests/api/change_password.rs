@@ -1,7 +1,6 @@
-use crate::helpers::{
-    assert_is_json_error, assert_json_response, spawn_app, spawn_app_container_with_user,
-};
+use crate::helpers::{assert_is_json_error, assert_json_response};
 use crate::macros::function_name_macro::function_name;
+use crate::test_app::{spawn_app, spawn_app_container_with_user};
 use uuid::Uuid;
 #[tokio::test]
 async fn you_must_be_logged_in_to_see_the_change_password_form() {

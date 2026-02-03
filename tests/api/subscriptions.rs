@@ -1,5 +1,6 @@
-use crate::helpers::{mount_mock_email_server, retry, spawn_app};
+use crate::helpers::{mount_mock_email_server, retry};
 use crate::macros::function_name_macro::function_name;
+use crate::test_app::spawn_app;
 use wiremock::Times;
 
 #[tokio::test]

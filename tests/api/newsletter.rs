@@ -1,8 +1,8 @@
 use crate::helpers::{
-    ConfirmationLinks, TestApp, assert_is_json_error, assert_json_response,
-    mount_mock_email_server, spawn_app, spawn_app_container_with_user,
+    ConfirmationLinks, assert_is_json_error, assert_json_response, mount_mock_email_server,
 };
 use crate::macros::function_name_macro::function_name;
+use crate::test_app::{TestApp, spawn_app, spawn_app_container_with_user};
 use fake::Fake;
 use fake::faker::internet::en::SafeEmail;
 use fake::faker::name::en::Name;
