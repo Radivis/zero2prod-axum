@@ -115,6 +115,7 @@ pub mod function_name_macro {
                                             let is_valid_func = !candidate_func.starts_with("function_name")
                                                 && !candidate_func.contains("spawn_app")
                                                 && !candidate_func.contains("helpers::")
+                                                && !candidate_func.contains("test_app::")
                                                 && !candidate_func.starts_with("_")
                                                 && candidate_func.chars().any(|c| c.is_alphabetic());
 

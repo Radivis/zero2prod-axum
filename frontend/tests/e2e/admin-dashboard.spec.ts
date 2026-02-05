@@ -14,12 +14,12 @@ test.describe('Admin Dashboard', () => {
   });
 
   test('dashboard displays username after login', async ({ authenticatedPage }) => {
-    const { page } = authenticatedPage;
+    const { page, username } = authenticatedPage;
     
     // authenticatedPage fixture already logs us in and navigates to dashboard
     
-    // Should see welcome message
-    await expect(page.locator('text=/Welcome/i')).toBeVisible();
+    // Should see welcome message with the actual username
+    await expect(page.locator(`text=/Welcome ${username}/i`)).toBeVisible();
   });
 
   test('logout functionality works', async ({ authenticatedPage }) => {

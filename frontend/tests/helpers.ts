@@ -3,6 +3,9 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import * as TIMEOUTS from './constants';
+import type { TestApp } from './init';
+import type { TestUser } from './fixtures';
 
 // ES module equivalent of __dirname - MUST be defined BEFORE use
 const __filename = fileURLToPath(import.meta.url);
@@ -10,9 +13,11 @@ const __dirname = path.dirname(__filename);
 
 const sleep = promisify(setTimeout);
 
+// Source type for structured logging
+export type LogSource = 'TEST' | 'FRONTEND' | 'BACKEND';
+
 // Helper to write to log file (fire-and-forget to avoid blocking)
-// source: TEST (Playwright test), FRONTEND (Vite server), BACKEND (test server)
-export function writeLog(testName: string, message: string, source: 'TEST' | 'FRONTEND' | 'BACKEND' = 'TEST') {
+export function writeLog(testName: string, message: string, source: LogSource = 'TEST') {
   const logsDir = path.join(__dirname, 'logs', 'e2e-telemetry');
   
   const sanitizedTestName = testName
@@ -27,22 +32,6 @@ export function writeLog(testName: string, message: string, source: 'TEST' | 'FR
   fs.promises.mkdir(logsDir, { recursive: true })
     .then(() => fs.promises.appendFile(logFile, `[${timestamp}] [${source}] ${message}\n`))
     .catch(() => {}); // Silently ignore errors to avoid blocking tests
-}
-
-export interface TestApp {
-  port: number;
-  address: string;
-  testName: string;
-  process: ChildProcess;
-  username?: string;
-  password?: string;
-  userId?: string;
-}
-
-export interface TestUser {
-  username: string;
-  password: string;
-  userId?: string;
 }
 
 /**
@@ -92,13 +81,16 @@ export async function loginAsUser(
     }
     
     // Give the database a moment to ensure the user is fully committed
-    await sleep(500);
+    await sleep(TIMEOUTS.DELAY_DATABASE_COMMIT);
   }
   await page.goto('/login', { waitUntil: 'networkidle' });
   
   // Wait for the login form to be visible and the "checking" state to finish
   // The Login component has a useEffect that checks if users exist
-  await page.waitForSelector('input[type="text"], input[name="username"]', { state: 'visible', timeout: 10000 });
+  await page.waitForSelector('input[type="text"], input[name="username"]', { 
+    state: 'visible', 
+    timeout: TIMEOUTS.TIMEOUT_LOGIN_FORM_VISIBLE 
+  });
   
   // Wait for the checking state to finish (the CircularProgress should disappear)
   // Check if there's a loading spinner and wait for it to disappear
@@ -109,7 +101,7 @@ export async function loginAsUser(
   }
   
   // Wait a bit for any redirects to settle (e.g., if no users exist, redirects to initial_password)
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(TIMEOUTS.DELAY_UI_TRANSITION);
   
   // Check if we're still on the login page (if not, something redirected us)
   const currentUrl = page.url();
@@ -139,9 +131,11 @@ export async function loginAsUser(
   
   // Verify server is still alive before attempting login
   if (backendAddress) {
-    try {
-      await writeLog(logTestName, `Checking backend health before login: ${backendAddress}/health_check`, 'TEST');
-      const healthCheck = await fetch(`${backendAddress}/health_check`, { signal: AbortSignal.timeout(5000) });
+  try {
+    await writeLog(logTestName, `Checking backend health before login: ${backendAddress}/health_check`, 'TEST');
+    const healthCheck = await fetch(`${backendAddress}/health_check`, { 
+      signal: AbortSignal.timeout(TIMEOUTS.TIMEOUT_BACKEND_HEALTH_CHECK) 
+    });
       if (!healthCheck.ok) {
         await writeLog(logTestName, `WARNING: Backend health check failed: ${healthCheck.status}`, 'TEST');
       } else {
@@ -155,7 +149,9 @@ export async function loginAsUser(
   
   // Set up a promise to wait for navigation BEFORE clicking submit
   // This ensures we catch the navigation even if it happens quickly
-  const navigationPromise = page.waitForURL(/\/admin\/dashboard/, { timeout: 20000 });
+  const navigationPromise = page.waitForURL(/\/admin\/dashboard/, { 
+    timeout: TIMEOUTS.TIMEOUT_LOGIN_NAVIGATION 
+  });
   
   // Track if request was actually sent
   let requestWasSent = false;
@@ -173,7 +169,7 @@ export async function loginAsUser(
       }
       return isLoginPost;
     },
-    { timeout: 20000 } // Increased timeout
+    { timeout: TIMEOUTS.TIMEOUT_LOGIN_RESPONSE }
   );
   
   // Also capture the request to see what was sent
@@ -218,7 +214,7 @@ export async function loginAsUser(
     await writeLog(logTestName, 'Waiting for login response...');
     
     // Check if request was sent before waiting
-    await page.waitForTimeout(500); // Give request a moment to be sent
+    await page.waitForTimeout(TIMEOUTS.DELAY_FORM_SUBMISSION);
     if (!requestWasSent) {
       await writeLog(logTestName, 'ERROR: Login request was not sent after clicking submit', 'error');
       throw new Error('Login request was not sent - form submission may have failed');
@@ -257,7 +253,9 @@ export async function loginAsUser(
       // Check if server is still alive
       if (backendAddress) {
         try {
-          const healthCheck = await fetch(`${backendAddress}/health_check`, { signal: AbortSignal.timeout(3000) });
+          const healthCheck = await fetch(`${backendAddress}/health_check`, { 
+            signal: AbortSignal.timeout(TIMEOUTS.TIMEOUT_BACKEND_HEALTH_SHORT) 
+          });
           await writeLog(logTestName, `Backend health check after timeout: ${healthCheck.status}`, healthCheck.ok ? 'info' : 'error');
         } catch (healthError: any) {
           await writeLog(logTestName, `ERROR: Backend appears to be down after timeout: ${healthError.message}`, 'error');
@@ -266,7 +264,7 @@ export async function loginAsUser(
       }
       
       // Check if there's an error message displayed on the page
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(TIMEOUTS.DELAY_UI_ERROR_APPEAR);
       const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/failed/i').isVisible().catch(() => false);
       const currentUrl = page.url();
       await page.screenshot({ path: `test-results/login-timeout-${Date.now()}.png` }).catch(() => {});
@@ -281,7 +279,7 @@ export async function loginAsUser(
     }
     
     // Check if there's an error message displayed on the page
-    await page.waitForTimeout(1000); // Give error message time to appear
+    await page.waitForTimeout(TIMEOUTS.DELAY_UI_ERROR_APPEAR);
     const errorVisible = await page.locator('[role="alert"], .MuiAlert-root, text=/Authentication failed/i, text=/failed/i').isVisible().catch(() => false);
     if (errorVisible) {
       const errorText = await page.locator('[role="alert"], .MuiAlert-root').first().textContent().catch(() => 'Authentication failed');
@@ -312,7 +310,7 @@ export async function loginAsUser(
   }
   
   // Give navigation a moment to happen
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(TIMEOUTS.DELAY_UI_TRANSITION);
   
   // Wait for navigation to dashboard
   try {
@@ -337,7 +335,7 @@ export async function loginAsUser(
       const isLoading = await page.locator('text=Loading, CircularProgress').isVisible().catch(() => false);
       if (isLoading) {
         // Wait a bit more for auth check to complete
-        await page.waitForTimeout(3000);
+        await page.waitForTimeout(TIMEOUTS.DELAY_AUTH_CHECK_SETTLE);
         const newUrl = page.url();
         if (newUrl.includes('/admin/dashboard')) {
           // Navigation happened, continue
@@ -376,27 +374,31 @@ export async function loginAsUser(
   const cookies = await page.context().cookies();
   const sessionCookie = cookies.find(c => c.name.includes('session') || c.name.includes('sid'));
   if (!sessionCookie) {
-    console.warn('Warning: No session cookie found after login, but navigation succeeded');
+    await writeLog(logTestName, 'Warning: No session cookie found after login, but navigation succeeded', 'TEST');
   }
   
   // Wait for the dashboard to be fully loaded and auth check to complete
   // ProtectedRoute will check auth when the dashboard loads
   // AdminDashboard also does its own auth check
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { 
+    timeout: TIMEOUTS.TIMEOUT_DASHBOARD_LOAD 
+  }).catch(() => {});
   
   // Wait for the dashboard auth check to complete and welcome message to appear
   // This ensures both ProtectedRoute and AdminDashboard have finished their auth checks
   try {
     await page.waitForResponse(
       (response: any) => response.url().includes('/api/auth/me') && response.status() === 200,
-      { timeout: 10000 }
+      { timeout: TIMEOUTS.TIMEOUT_AUTH_CHECK }
     );
   } catch (e) {
     // Auth check might have already completed, that's okay
   }
   
   // Wait for any loading spinners to disappear and welcome message to appear
-  await page.waitForSelector('text=Welcome', { timeout: 10000 }).catch(() => {
+  await page.waitForSelector('text=Welcome', { 
+    timeout: TIMEOUTS.TIMEOUT_WELCOME_MESSAGE 
+  }).catch(() => {
     // If welcome text doesn't appear, check if we're still on dashboard
     const url = page.url();
     if (!url.includes('/admin/dashboard')) {

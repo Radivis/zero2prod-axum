@@ -59,6 +59,12 @@ cd frontend
 npx playwright test tests/e2e/login.spec.ts
 ```
 
+### Run a single test in headed mode sequentially (useful for debugging):
+```bash
+cd frontend
+npx playwright test tests/e2e/login.spec.ts --headed --workers=1
+```
+
 ## How It Works
 
 1. **Backend Server**: Each test spawns a fresh backend test server using the `spawn_test_server` binary

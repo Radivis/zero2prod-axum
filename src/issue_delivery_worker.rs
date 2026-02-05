@@ -31,7 +31,9 @@ pub async fn run_worker_until_stopped(configuration: Settings) -> Result<(), any
 }
 
 async fn worker_loop(pool: PgPool, email_client: EmailClient) -> Result<(), anyhow::Error> {
-    // TODO: Handle fatal failures like invalid subscriber email addresses
+    // Note: Fatal failures (e.g., invalid subscriber email addresses) are currently logged
+    // via tracing::error! in try_execute_task. The worker continues processing other emails.
+    // Future enhancement: implement a dead-letter queue for permanently failed deliveries.
     loop {
         match try_execute_task(&pool, &email_client).await {
             Ok(ExecutionOutcome::EmptyQueue) => {

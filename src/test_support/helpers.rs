@@ -1,27 +1,18 @@
-use once_cell::sync::Lazy;
+use crate::configuration::DatabaseSettings;
+use crate::telemetry::{get_subscriber, init_subscriber};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::{LazyLock, Mutex};
-use std::time::Duration;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate, Times};
-
-use zero2prod::configuration::DatabaseSettings;
-use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 // This holds the guard for the entire lifetime of the test process
-static LOG_GUARD: Lazy<Mutex<Option<WorkerGuard>>> = Lazy::new(|| Mutex::new(None));
+static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 
 // Ensure that the `tracing` stack is only initialised once using `LazyLock`
-
 pub static TRACING: LazyLock<()> = LazyLock::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
     let loglevel = std::env::var("LOGLEVEL").unwrap_or(default_filter_level);
-    // We cannot assign the output of `get_subscriber` to a variable based on the
-    // value TEST_LOG` because the sink is part of the type returned by
-    // `get_subscriber`, therefore they are not the same type. We could work around
-    // it, but this is the most straight-forward way of moving forward.
+
     if std::env::var("TEST_LOG").is_ok() {
         let subscriber = get_subscriber(subscriber_name, loglevel, std::io::stdout);
         init_subscriber(subscriber);
@@ -32,12 +23,9 @@ pub static TRACING: LazyLock<()> = LazyLock::new(|| {
 });
 
 pub fn test_writer() -> NonBlocking {
-    // nextest passes the test name via --exact argument
-    // uncomment the next line and run "cargo test" to see how the args are structured:
-    // std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
     let test_name = std::env::args()
         .skip_while(|arg| arg != "--exact")
-        .nth(1) // we need the first arg exactly after "--exact"
+        .nth(1)
         .map(|arg| arg.replace("::", "-").to_string())
         .unwrap_or("unlabeled_test".into())
         .replace(' ', "_");
@@ -45,25 +33,20 @@ pub fn test_writer() -> NonBlocking {
     let _ = std::fs::create_dir_all("tests/logs");
     let _ = std::fs::create_dir_all("tests/logs/nextest");
     let _ = std::fs::create_dir_all("tests/logs/cargo_test");
+
     let filename = if test_name != "unlabeled_test" {
         format!("tests/logs/nextest/{}.log", test_name)
     } else {
-        "tests/logs/cargo_test/integration.log".into()
+        format!("tests/logs/cargo_test/cargo_test.log")
     };
-    let file = std::fs::File::create(filename).expect("Failed to create log file");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
-    // Store guard so it lives until process end
-    let mut slot = LOG_GUARD.lock().unwrap();
-    *slot = Some(guard);
+    let file_appender = tracing_appender::rolling::never(".", filename);
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    // Store the guard to prevent it from being dropped
+    *LOG_GUARD.lock().unwrap() = Some(guard);
 
     non_blocking
-}
-
-/// Confirmation links embedded in the request to the email API.
-pub struct ConfirmationLinks {
-    pub html: reqwest::Url,
-    pub plain_text: reqwest::Url,
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
@@ -79,6 +62,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         database_name: "postgres".to_string(),
         ..config.clone()
     };
+
     let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to Postgres");
@@ -111,65 +95,16 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database.");
+
     // Migrate database
     let connection_pool = PgPool::connect_with(config.connect_options())
         .await
         .expect("Failed to connect to Postgres.");
+
     sqlx::migrate!("./migrations")
         .run(&connection_pool)
         .await
         .expect("Failed to migrate the database");
+
     connection_pool
-}
-
-pub async fn mount_mock_email_server(
-    email_server: &MockServer,
-    request_num_expectation: Option<Times>,
-) -> () {
-    let mock = Mock::given(path("/email"))
-        .and(method("POST"))
-        .respond_with(ResponseTemplate::new(200));
-    if let Some(num_expected_requests) = request_num_expectation {
-        mock.expect(num_expected_requests).mount(email_server).await
-    } else {
-        mock.mount(email_server).await
-    }
-}
-
-pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
-    assert_eq!(response.status().as_u16(), expected_status);
-    assert_eq!(
-        response.headers().get("Content-Type").unwrap(),
-        "application/json"
-    );
-}
-
-pub async fn assert_json_response<T: serde::de::DeserializeOwned>(
-    response: reqwest::Response,
-) -> T {
-    assert_eq!(
-        response.headers().get("Content-Type").unwrap(),
-        "application/json"
-    );
-    response
-        .json()
-        .await
-        .expect("Failed to parse JSON response")
-}
-
-pub async fn retry<F, Fut, T>(mut f: F, max_retries: u8) -> T
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, sqlx::Error>>,
-{
-    for attempt in 0..max_retries {
-        match f().await {
-            Ok(value) => return value,
-            Err(sqlx::Error::RowNotFound) if attempt < max_retries - 1 => {
-                tokio::time::sleep(Duration::from_millis(100)).await; // 100ms backoff
-            }
-            Err(e) => panic!("{1}: {:?}", e, "Non-RowNotFound error"),
-        }
-    }
-    f().await.expect("Retry exhausted")
 }

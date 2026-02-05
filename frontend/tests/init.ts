@@ -1,9 +1,11 @@
 import { spawn, ChildProcess } from 'child_process';
+import { execSync } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { writeLog } from './helpers';
+import * as TIMEOUTS from './constants';
 
 // ES module equivalent of __dirname - MUST be defined BEFORE use
 const __filename = fileURLToPath(import.meta.url);
@@ -18,12 +20,6 @@ export interface TestApp {
   process: ChildProcess;
   username?: string;
   password?: string;
-  userId?: string;
-}
-
-export interface TestUser {
-  username: string;
-  password: string;
   userId?: string;
 }
 
@@ -122,7 +118,7 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     password?: string;
     user_id?: string;
   } | null = null;
-  const maxWait = 30000; // 30 seconds
+  const maxWait = 10000; // 10 seconds
   const startTime = Date.now();
 
   while (!serverInfo && Date.now() - startTime < maxWait) {
@@ -217,37 +213,22 @@ export async function stopTestApp(app: TestApp): Promise<void> {
       }
       
       // Give it a moment to fully clean up
-      await sleep(500);
-    } catch (error) {
+      await sleep(TIMEOUTS.DELAY_BACKEND_CLEANUP);
+    } catch (error: any) {
       // Ignore errors during cleanup - process might already be dead
-      console.warn('Error during backend cleanup:', error);
+      await writeLog('cleanup', `Error during backend cleanup: ${error?.message || error}`, 'TEST');
     }
   }
 }
 
 /**
- * Wait for backend to be ready
+ * Generic function to wait for a URL to become ready
  */
-export async function waitForBackendReady(address: string, maxWait = 30000): Promise<void> {
-  const startTime = Date.now();
-  while (Date.now() - startTime < maxWait) {
-    try {
-      const response = await fetch(`${address}/health_check`);
-      if (response.ok) {
-        return;
-      }
-    } catch (e) {
-      // Server not ready yet
-    }
-    await sleep(500);
-  }
-  throw new Error('Backend did not become ready in time');
-}
-
-/**
- * Wait for frontend to be ready
- */
-export async function waitForFrontendReady(url: string, maxWait = 30000): Promise<void> {
+export async function waitForUrlReady(
+  url: string,
+  maxWait: number,
+  errorMessage: string = 'URL did not become ready in time'
+): Promise<void> {
   const startTime = Date.now();
   while (Date.now() - startTime < maxWait) {
     try {
@@ -260,5 +241,33 @@ export async function waitForFrontendReady(url: string, maxWait = 30000): Promis
     }
     await sleep(500);
   }
-  throw new Error('Frontend did not become ready in time');
+  throw new Error(errorMessage);
+}
+
+/**
+ * Wait for backend to be ready
+ */
+export async function waitForBackendReady(
+  address: string, 
+  maxWait: number = TIMEOUTS.TIMEOUT_BACKEND_READY
+): Promise<void> {
+  return waitForUrlReady(
+    `${address}/health_check`,
+    maxWait,
+    'Backend did not become ready in time'
+  );
+}
+
+/**
+ * Wait for frontend to be ready
+ */
+export async function waitForFrontendReady(
+  url: string,
+  maxWait: number = TIMEOUTS.TIMEOUT_FRONTEND_READY
+): Promise<void> {
+  return waitForUrlReady(
+    url,
+    maxWait,
+    'Frontend did not become ready in time'
+  );
 }

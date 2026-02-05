@@ -180,6 +180,8 @@ pub async fn publish_newsletter(
             })?;
 
             // Check if the saved response is JSON by checking Content-Type header
+            // This is needed because the backend was changed to be a JSON API server
+            // with the addition of React in the frontend
             let is_json = parts
                 .headers
                 .get(axum::http::header::CONTENT_TYPE)
@@ -218,11 +220,11 @@ pub async fn publish_newsletter(
 impl IntoResponse for PublishError {
     fn into_response(self) -> Response {
         match self {
-            PublishError::UnexpectedError(_) => (
+            PublishError::UnexpectedError(ref err) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(PublishNewsletterResponse {
                     success: false,
-                    error: Some("Something went wrong".to_string()),
+                    error: Some(format!("Unexpected error: {:#}", err)),
                     message: None,
                 }),
             )

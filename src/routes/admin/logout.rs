@@ -13,15 +13,18 @@ pub struct LogoutResponse {
 
 pub async fn log_out(session: Session) -> impl IntoResponse {
     let typed_session = TypedSession(session);
+
+    let not_logged_in_response = (
+        StatusCode::UNAUTHORIZED,
+        Json(LogoutResponse {
+            success: false,
+            error: Some("Not logged in".to_string()),
+        }),
+    )
+        .into_response();
+
     match typed_session.get_user_id().await {
-        Ok(None) => (
-            StatusCode::UNAUTHORIZED,
-            Json(LogoutResponse {
-                success: false,
-                error: Some("Not logged in".to_string()),
-            }),
-        )
-            .into_response(),
+        Ok(None) => not_logged_in_response,
         Ok(Some(_)) => {
             // Logout (removes user_id, cycles session ID)
             typed_session.log_out().await;
@@ -34,13 +37,6 @@ pub async fn log_out(session: Session) -> impl IntoResponse {
             )
                 .into_response()
         }
-        Err(_) => (
-            StatusCode::UNAUTHORIZED,
-            Json(LogoutResponse {
-                success: false,
-                error: Some("Not logged in".to_string()),
-            }),
-        )
-            .into_response(),
+        Err(_) => not_logged_in_response,
     }
 }

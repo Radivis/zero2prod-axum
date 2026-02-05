@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,35 +10,14 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
-import { apiRequest } from '../api/client'
-
-interface UsersExistResponse {
-  users_exist: boolean
-}
+import { useCheckUsersExist } from '../hooks/useCheckUsersExist'
 
 function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [checking, setChecking] = useState(true)
+  const checking = useCheckUsersExist()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-
-  useEffect(() => {
-    const checkUsersExist = async () => {
-      try {
-        const response = await apiRequest<UsersExistResponse>('/api/users/exists')
-        if (!response.users_exist) {
-          navigate('/initial_password')
-        }
-      } catch (err) {
-        // If check fails, allow login attempt anyway
-        console.warn('Failed to check if users exist:', err)
-      } finally {
-        setChecking(false)
-      }
-    }
-    checkUsersExist()
-  }, [navigate])
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
@@ -74,10 +53,12 @@ function Login() {
           navigate('/admin/dashboard')
         } else {
           // If auth check fails, still try to navigate (might be a timing issue)
+          console.warn('Auth check returned non-OK status after login, navigating anyway')
           navigate('/admin/dashboard')
         }
       } catch (error) {
         // If auth check fails, still try to navigate
+        console.error('Auth check failed after login:', error)
         navigate('/admin/dashboard')
       }
     },

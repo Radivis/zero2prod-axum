@@ -59,6 +59,7 @@ function AdminDashboard() {
     },
     onError: () => {
       // Even if logout fails, redirect to login
+      console.warn('Logout request failed, but redirecting to login page anyway')
       navigate('/login')
     },
   })

@@ -3,25 +3,9 @@
 // Build with: cargo build --bin spawn_test_server --features e2e-tests
 
 #[cfg(feature = "e2e-tests")]
-#[allow(dead_code)]
-mod helpers {
-    // Include test helpers - many functions are unused in this binary
-    // but are needed for integration tests
-    include!("../../tests/api/helpers.rs");
-}
-
-#[cfg(feature = "e2e-tests")]
-#[allow(dead_code)]
-mod test_app {
-    // Include test app - many methods are unused in this binary
-    // but are needed for integration tests
-    include!("../../tests/api/test_app.rs");
-}
-
-#[cfg(feature = "e2e-tests")]
 use std::io::{self, Write};
 #[cfg(feature = "e2e-tests")]
-use test_app::spawn_app;
+use zero2prod::test_support::spawn_app;
 
 #[cfg(feature = "e2e-tests")]
 #[tokio::main]

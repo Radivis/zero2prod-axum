@@ -3,7 +3,8 @@ import { spawnTestApp, stopTestApp, TestApp, waitForBackendReady } from './init'
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { loginAsUser, writeLog } from './helpers';
+import { writeLog } from './helpers';
+import * as TIMEOUTS from './constants';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -68,8 +69,8 @@ export async function makeUser(
         errorData = { error: responseText || 'Unknown error' };
       }
       
-      console.error(`[makeUser] Failed to create user: ${response.status} ${response.statusText}`);
-      console.error(`[makeUser] Response body: ${responseText}`);
+      await writeLog('makeUser', `Failed to create user: ${response.status} ${response.statusText}`, 'TEST');
+      await writeLog('makeUser', `Response body: ${responseText}`, 'TEST');
       
       return {
         success: false,
@@ -88,8 +89,8 @@ export async function makeUser(
     // Verify the user is actually visible in the database before returning
     // This prevents race conditions where the frontend checks for user existence
     // before the database transaction is fully committed
-    const maxRetries = 10;
-    const retryDelay = 200; // ms
+    const maxRetries = TIMEOUTS.USER_VERIFICATION_MAX_RETRIES;
+    const retryDelay = TIMEOUTS.USER_VERIFICATION_RETRY_DELAY;
     let userVerified = false;
     
     for (let i = 0; i < maxRetries; i++) {
@@ -112,12 +113,12 @@ export async function makeUser(
     }
     
     if (!userVerified) {
-      console.warn(`[makeUser] User created but not yet visible in existence check after ${maxRetries} retries`);
+      await writeLog('makeUser', `User created but not yet visible in existence check after ${maxRetries} retries`, 'TEST');
     }
     
     // Small delay to ensure Redis session store is ready
     // Helps prevent race conditions with high parallelism
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAY_REDIS_READY));
     
     return {
       success: true,
@@ -126,7 +127,7 @@ export async function makeUser(
       userId: data.user_id,
     };
   } catch (error: any) {
-    console.error(`[makeUser] Network error:`, error);
+    await writeLog('makeUser', `Network error: ${error.message || error}`, 'TEST');
     return {
       success: false,
       error: {
@@ -140,7 +141,7 @@ export async function makeUser(
   }
 }
 
-export async function loginSimple(
+export async function login(
   username: string,
   password: string,
   logFileName: string,
@@ -206,7 +207,7 @@ export const test = base.extend<TestFixtures>({
     const dbTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
     // Log file name without e2e- prefix
     const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
-    await writeLog(logFileName, `Starting test: ${testName}`, 'TEST');
+    await writeLog(logFileName, `Starting backend for test: ${testName}`, 'TEST');
     
     // Always spawn without a user - tests create users via makeUser() if needed
     let app: TestApp;
@@ -410,8 +411,7 @@ export const test = base.extend<TestFixtures>({
 
     // Login via the browser
     try {
-      await loginSimple(username, password, logFileName, frontendServer, page);
-      // await loginAsUser(page, username, password, backendApp.address, logFileName);
+      await login(username, password, logFileName, frontendServer, page);
     } catch (error) {
       await writeLog(logFileName, `ERROR: Failed to login: ${error}`, 'TEST');
       await context.close();

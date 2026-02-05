@@ -1,4 +1,5 @@
 mod admin;
+pub mod constants;
 mod health_check;
 mod initial_password;
 mod login;

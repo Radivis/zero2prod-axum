@@ -1,6 +1,9 @@
 #!/bin/bash
 # Cross-platform notification script
 # Usage: ./scripts/notify.sh "Title" "Message"
+#
+# Note: This script is currently unused, but could be integrated to notify
+# the user when E2E tests have finished running.
 
 TITLE="$1"
 MESSAGE="$2"

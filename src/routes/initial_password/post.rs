@@ -1,3 +1,6 @@
+use crate::authentication::{
+    MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordValidationError, validate_password_length,
+};
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
@@ -13,13 +16,24 @@ pub struct InitialPasswordFormData {
     password_confirmation: Secret<String>,
 }
 
+#[derive(serde::Serialize)]
+pub struct InitialPasswordResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
 #[derive(thiserror::Error)]
 pub enum InitialPasswordError {
     #[error("You entered two different passwords - the field values must match.")]
     PasswordMismatch,
-    #[error("The password must have at least 12 characters besides spaces.")]
+    #[error("The password must have at least {MIN_PASSWORD_LENGTH} characters besides spaces.")]
     PasswordTooShort,
-    #[error("The password must not have more than 128 characters.")]
+    #[error("The password must not have more than {MAX_PASSWORD_LENGTH} characters.")]
     PasswordTooLong,
     #[error("Users already exist. Initial password setup is only available when no users exist.")]
     UsersAlreadyExist,
@@ -35,24 +49,24 @@ impl std::fmt::Debug for InitialPasswordError {
 
 impl IntoResponse for InitialPasswordError {
     fn into_response(self) -> axum::response::Response {
-        match self {
+        let status = match self {
             InitialPasswordError::PasswordMismatch
             | InitialPasswordError::PasswordTooShort
             | InitialPasswordError::PasswordTooLong
-            | InitialPasswordError::UsersAlreadyExist => {
-                // Return JSON error for frontend to handle
-                (
-                    StatusCode::BAD_REQUEST,
-                    axum::Json(serde_json::json!({ "error": self.to_string() })),
-                )
-                    .into_response()
-            }
-            InitialPasswordError::UnexpectedError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                axum::Json(serde_json::json!({ "error": "Internal server error" })),
-            )
-                .into_response(),
-        }
+            | InitialPasswordError::UsersAlreadyExist => StatusCode::BAD_REQUEST,
+            InitialPasswordError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        (
+            status,
+            Json(InitialPasswordResponse {
+                success: false,
+                error: Some(self.to_string()),
+                username: None,
+                message: None,
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -75,14 +89,12 @@ pub async fn create_initial_password(
         return Err(InitialPasswordError::PasswordMismatch);
     }
 
-    // Validate password length (excluding spaces)
-    if form.password.expose_secret().replace(" ", "").len() < 12 {
-        return Err(InitialPasswordError::PasswordTooShort);
-    }
-
-    // Validate maximum password length
-    if form.password.expose_secret().len() > 128 {
-        return Err(InitialPasswordError::PasswordTooLong);
+    // Validate password length
+    if let Err(validation_error) = validate_password_length(&form.password) {
+        return Err(match validation_error {
+            PasswordValidationError::TooShort => InitialPasswordError::PasswordTooShort,
+            PasswordValidationError::TooLong => InitialPasswordError::PasswordTooLong,
+        });
     }
 
     // Create admin user with provided username
@@ -94,10 +106,11 @@ pub async fn create_initial_password(
     // Return JSON response for API clients
     Ok((
         StatusCode::CREATED,
-        Json(serde_json::json!({
-            "success": true,
-            "username": form.username.to_string(),
-            "message": "Admin user created successfully. Please log in."
-        })),
+        Json(InitialPasswordResponse {
+            success: true,
+            error: None,
+            username: Some(form.username.to_string()),
+            message: Some("Admin user created successfully. Please log in.".to_string()),
+        }),
     ))
 }

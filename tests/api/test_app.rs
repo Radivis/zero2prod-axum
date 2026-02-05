@@ -1,5 +1,6 @@
 use crate::helpers::{ConfirmationLinks, configure_database};
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version, password_hash::SaltString};
+use linkify::LinkFinder;
 use sqlx::PgPool;
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -36,23 +37,6 @@ impl TestUser {
     }
 
     async fn store(&self, pool: &PgPool) {
-        // Debug: Check which database we're storing to
-        let db_name_result = sqlx::query!("SELECT current_database() as db_name")
-            .fetch_one(pool)
-            .await;
-
-        match db_name_result {
-            Ok(db_info) => {
-                eprintln!(
-                    "[STORE DEBUG] Storing user to database: {:?}",
-                    db_info.db_name
-                );
-            }
-            Err(e) => {
-                eprintln!("[STORE DEBUG] Could not get database name: {:?}", e);
-            }
-        }
-
         let salt = SaltString::generate(&mut rand::thread_rng());
         // Match parameters of the default password
         let password_hash = Argon2::new(
@@ -73,8 +57,6 @@ impl TestUser {
         .execute(pool)
         .await
         .expect("Failed to store test user.");
-
-        eprintln!("[STORE DEBUG] User stored successfully: {}", self.username);
     }
 }
 
@@ -196,7 +178,7 @@ impl TestApp {
         let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
         // Extract the link from one of the request fields.
         let get_link = |s: &str| {
-            let links: Vec<_> = linkify::LinkFinder::new()
+            let links: Vec<_> = LinkFinder::new()
                 .links(s)
                 .filter(|l| *l.kind() == linkify::LinkKind::Url)
                 .collect();
@@ -212,14 +194,6 @@ impl TestApp {
         let html = get_link(body["HtmlBody"].as_str().unwrap());
         let plain_text = get_link(body["TextBody"].as_str().unwrap());
         ConfirmationLinks { html, plain_text }
-    }
-
-    pub async fn _get_test_user(&self) -> (String, String) {
-        let row = sqlx::query!("SELECT username, password_hash FROM users LIMIT 1",)
-            .fetch_one(&self.db_connection_pool)
-            .await
-            .expect("Failed to create test users.");
-        (row.username, row.password_hash)
     }
 
     pub async fn make_container_with_user(self) -> TestAppContainerWithUser {
@@ -247,21 +221,27 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
         let mut c = get_configuration().expect("Failed to read configuration.");
         // Use a different database for each test case
         c.database.database_name = format!("test-{}", test_name);
-        eprintln!(
-            "[SPAWN_APP DEBUG] Creating database: {}",
-            c.database.database_name
-        );
         // Use a random OS port
         c.application.port = 0;
         c.email_client.base_url = email_server.uri();
+
+        // Use a unique Redis database to prevent session conflicts between parallel tests
+        // Hash the test name to get a Redis DB index (0-15)
+        use secrecy::ExposeSecret;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        test_name.hash(&mut hasher);
+        let db_index = (hasher.finish() % 16) as u8;
+
+        let redis_url = c.redis_uri.expose_secret();
+        c.redis_uri =
+            secrecy::Secret::new(format!("{}/{}", redis_url.trim_end_matches('/'), db_index));
+
         c
     };
 
     let db_connection_pool = configure_database(&configuration.database).await;
-    eprintln!(
-        "[SPAWN_APP DEBUG] Database configured: {}",
-        configuration.database.database_name
-    );
 
     // Notice the .clone!
     let application = Application::build(configuration.clone())

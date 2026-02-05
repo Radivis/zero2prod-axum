@@ -1,3 +1,4 @@
+use crate::routes::constants::{ERROR_AUTHENTICATION_FAILED, ERROR_SOMETHING_WENT_WRONG};
 use crate::session_state::TypedSession;
 use crate::startup::AppState;
 use axum::extract::{Json, State};
@@ -48,7 +49,7 @@ pub async fn login(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(LoginResponse {
                         success: false,
-                        error: Some("Something went wrong".to_string()),
+                        error: Some("Failed to insert user_id into session".to_string()),
                     }),
                 )
                     .into_response();
@@ -66,8 +67,8 @@ pub async fn login(
         }
         Err(e) => {
             let error_msg = match e {
-                AuthError::InvalidCredentials(_) => "Authentication failed",
-                AuthError::UnexpectedError(_) => "Something went wrong",
+                AuthError::InvalidCredentials(_) => ERROR_AUTHENTICATION_FAILED,
+                AuthError::UnexpectedError(_) => ERROR_SOMETHING_WENT_WRONG,
             };
             (
                 StatusCode::UNAUTHORIZED,

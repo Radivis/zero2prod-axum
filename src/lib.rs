@@ -9,5 +9,8 @@ pub mod routes;
 pub mod session_state;
 pub mod startup;
 pub mod telemetry;
-
 pub mod utils;
+
+// Test support utilities only available with e2e-tests feature
+#[cfg(feature = "e2e-tests")]
+pub mod test_support;

@@ -11,6 +11,7 @@ use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
+use crate::routes::constants::ERROR_AUTHENTICATION_REQUIRED;
 use crate::routes::{
     auth_check_endpoint, change_password, check_users_exist_endpoint, confirm,
     create_initial_password, health_check, log_out, login, publish_newsletter, subscribe,
@@ -75,10 +76,6 @@ impl Application {
     }
 
     pub async fn run_until_stopped(self, configuration: Settings) -> Result<(), std::io::Error> {
-        eprintln!(
-            "[APP DEBUG] Application connecting to database: {}",
-            configuration.database.database_name
-        );
         let connection_pool = get_connection_pool(&configuration.database);
         let email_client = configuration.email_client.client();
         let app_state = AppState {
@@ -89,28 +86,8 @@ impl Application {
         };
 
         // Set up RedisStore with fred (compatible with both Redis and Valkey)
-        // For E2E tests, use a unique Redis database based on the database name
-        // This prevents session conflicts between parallel tests
         let redis_url = configuration.redis_uri.expose_secret();
-        let redis_url_with_db = if configuration
-            .database
-            .database_name
-            .starts_with("test-e2e-")
-        {
-            // Hash the database name to get a Redis DB index (0-15)
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            configuration.database.database_name.hash(&mut hasher);
-            let db_index = (hasher.finish() % 16) as u8; // Redis has 16 databases (0-15)
-
-            // Append database index to Redis URL
-            format!("{}/{}", redis_url.trim_end_matches('/'), db_index)
-        } else {
-            redis_url.to_string()
-        };
-
-        let redis_config = Config::from_url(redis_url_with_db.as_str())
+        let redis_config = Config::from_url(redis_url.as_str())
             .map_err(|e| std::io::Error::other(format!("Invalid Redis URL: {}", e)))?;
 
         let pool = Pool::new(redis_config, None, None, None, 6)
@@ -169,7 +146,7 @@ async fn require_auth(req: Request, next: Next) -> axum::response::Response {
                 StatusCode::UNAUTHORIZED,
                 Json(AuthErrorResponse {
                     success: false,
-                    error: "Authentication required".to_string(),
+                    error: ERROR_AUTHENTICATION_REQUIRED.to_string(),
                 }),
             )
                 .into_response()

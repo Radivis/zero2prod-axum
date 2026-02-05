@@ -1,3 +1,8 @@
+use crate::authentication::{
+    AuthError, Credentials, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordValidationError,
+    UserId, validate_credentials, validate_password_length,
+};
+use crate::routes::admin::utils::get_username;
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
@@ -5,9 +10,6 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use secrecy::{ExposeSecret, Secret};
-
-use crate::authentication::{AuthError, Credentials, UserId, validate_credentials};
-use crate::routes::admin::utils::get_username;
 
 #[derive(serde::Deserialize)]
 pub struct ChangePasswordFormData {
@@ -20,9 +22,9 @@ pub struct ChangePasswordFormData {
 pub enum ChangePasswordError {
     #[error("You entered two different new passwords - the field values must match.")]
     PasswordMismatch,
-    #[error("The new password must have at least 12 characters besides spaces.")]
+    #[error("The new password must have at least {MIN_PASSWORD_LENGTH} characters besides spaces.")]
     PasswordTooShort,
-    #[error("The new password must not have more than 128 characters.")]
+    #[error("The new password must not have more than {MAX_PASSWORD_LENGTH} characters.")]
     PasswordTooLong,
     #[error("The current password is incorrect.")]
     InvalidCurrentPassword,
@@ -45,32 +47,19 @@ pub struct ChangePasswordResponse {
 
 impl IntoResponse for ChangePasswordError {
     fn into_response(self) -> axum::response::Response {
-        let (status, error_msg) = match self {
-            ChangePasswordError::PasswordMismatch => (
-                StatusCode::BAD_REQUEST,
-                "You entered two different new passwords - the field values must match.",
-            ),
-            ChangePasswordError::PasswordTooShort => (
-                StatusCode::BAD_REQUEST,
-                "The new password must have at least 12 characters besides spaces.",
-            ),
-            ChangePasswordError::PasswordTooLong => (
-                StatusCode::BAD_REQUEST,
-                "The new password must not have more than 128 characters.",
-            ),
-            ChangePasswordError::InvalidCurrentPassword => (
-                StatusCode::UNAUTHORIZED,
-                "The current password is incorrect.",
-            ),
-            ChangePasswordError::UnexpectedError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong")
-            }
+        let status = match self {
+            ChangePasswordError::PasswordMismatch
+            | ChangePasswordError::PasswordTooShort
+            | ChangePasswordError::PasswordTooLong => StatusCode::BAD_REQUEST,
+            ChangePasswordError::InvalidCurrentPassword => StatusCode::UNAUTHORIZED,
+            ChangePasswordError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
+
         (
             status,
             Json(ChangePasswordResponse {
                 success: false,
-                error: Some(error_msg.to_string()),
+                error: Some(self.to_string()),
             }),
         )
             .into_response()
@@ -87,14 +76,12 @@ pub async fn change_password(
         return Err(ChangePasswordError::PasswordMismatch);
     }
 
-    // Validate password length (excluding spaces)
-    if form.new_password.expose_secret().replace(" ", "").len() < 12 {
-        return Err(ChangePasswordError::PasswordTooShort);
-    }
-
-    // Validate maximum password length
-    if form.new_password.expose_secret().len() > 128 {
-        return Err(ChangePasswordError::PasswordTooLong);
+    // Validate password length
+    if let Err(validation_error) = validate_password_length(&form.new_password) {
+        return Err(match validation_error {
+            PasswordValidationError::TooShort => ChangePasswordError::PasswordTooShort,
+            PasswordValidationError::TooLong => ChangePasswordError::PasswordTooLong,
+        });
     }
 
     // Get username for credential validation

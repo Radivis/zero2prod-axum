@@ -23,11 +23,6 @@ pub async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, AuthError> {
-    eprintln!(
-        "[AUTH DEBUG] Validating credentials for username: {}",
-        credentials.username
-    );
-
     let mut user_id = None;
     let mut expected_password_hash = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\
@@ -63,10 +58,8 @@ pub async fn validate_credentials(
     .await
     .context("Failed to spawn blocking task.")?;
 
-    match &verify_result {
-        Ok(_) => eprintln!("[AUTH DEBUG] Password verification: SUCCESS"),
-        Err(e) => eprintln!("[AUTH DEBUG] Password verification: FAILED - {:?}", e),
-    }
+    // Note: Password verification success/failure could be logged to an access.log
+    // file together with the username for security auditing purposes
 
     verify_result?;
 
@@ -108,24 +101,6 @@ async fn get_stored_credentials(
     username: &str,
     pool: &PgPool,
 ) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
-    // Debug: Check which database we're connected to
-    let db_name_result = sqlx::query!("SELECT current_database() as db_name")
-        .fetch_one(pool)
-        .await;
-
-    match db_name_result {
-        Ok(db_info) => {
-            eprintln!(
-                "[GET_CREDS DEBUG] Connected to database: {:?}",
-                db_info.db_name
-            );
-        }
-        Err(e) => {
-            eprintln!("[GET_CREDS DEBUG] Could not get database name: {:?}", e);
-        }
-    }
-
-    // Debug: Check all users in the database
     let all_users = sqlx::query!("SELECT username FROM users LIMIT 10")
         .fetch_all(pool)
         .await;
@@ -220,30 +195,19 @@ fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
 ) -> Result<(), AuthError> {
-    eprintln!(
-        "[VERIFY DEBUG] Password candidate length: {}",
+    tracing::debug!(
+        "Verifying password hash (candidate length: {})",
         password_candidate.expose_secret().len()
-    );
-    eprintln!(
-        "[VERIFY DEBUG] Expected hash: {}",
-        expected_password_hash.expose_secret()
     );
 
     let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")?;
 
-    let result = Argon2::default()
+    Argon2::default()
         .verify_password(
             password_candidate.expose_secret().as_bytes(),
             &expected_password_hash,
         )
         .context("Invalid password.")
-        .map_err(AuthError::InvalidCredentials);
-
-    match &result {
-        Ok(_) => eprintln!("[VERIFY DEBUG] Argon2 verification: SUCCESS"),
-        Err(e) => eprintln!("[VERIFY DEBUG] Argon2 verification: FAILED - {:?}", e),
-    }
-
-    result
+        .map_err(AuthError::InvalidCredentials)
 }
