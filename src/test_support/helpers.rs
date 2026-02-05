@@ -2,6 +2,7 @@ use crate::configuration::DatabaseSettings;
 use crate::telemetry::{get_subscriber, init_subscriber};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 
 // This holds the guard for the entire lifetime of the test process
@@ -63,9 +64,41 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         ..config.clone()
     };
 
-    let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
-        .await
-        .expect("Failed to connect to Postgres");
+    // Connect to maintenance database with exponential backoff retry logic
+    let mut connection = {
+        let max_retries = 5;
+        let mut last_error = None;
+        let mut connection = None;
+
+        for attempt in 1..=max_retries {
+            match PgConnection::connect_with(&maintenance_settings.connect_options()).await {
+                Ok(conn) => {
+                    connection = Some(conn);
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < max_retries {
+                        let delay_ms = 50 * (1 << (attempt - 1));
+                        tracing::debug!(
+                            "Failed to connect to maintenance database (attempt {}/{}), retrying in {}ms",
+                            attempt,
+                            max_retries,
+                            delay_ms
+                        );
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+
+        connection.unwrap_or_else(|| {
+            panic!(
+                "Failed to connect to Postgres after {} retries: {:?}",
+                max_retries, last_error
+            )
+        })
+    };
 
     // Terminate all connections to the database before dropping it
     connection
@@ -96,15 +129,80 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to create database.");
 
-    // Migrate database
-    let connection_pool = PgPool::connect_with(config.connect_options())
-        .await
-        .expect("Failed to connect to Postgres.");
+    // Close maintenance connection
+    drop(connection);
 
-    sqlx::migrate!("./migrations")
-        .run(&connection_pool)
-        .await
-        .expect("Failed to migrate the database");
+    // Connect to the new database with exponential backoff retry logic
+    let connection_pool = {
+        let max_retries = 5;
+        let mut last_error = None;
+        let mut pool = None;
+
+        for attempt in 1..=max_retries {
+            match PgPool::connect_with(config.connect_options()).await {
+                Ok(p) => {
+                    pool = Some(p);
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < max_retries {
+                        let delay_ms = 50 * (1 << (attempt - 1));
+                        tracing::debug!(
+                            "Failed to connect to test database (attempt {}/{}), retrying in {}ms",
+                            attempt,
+                            max_retries,
+                            delay_ms
+                        );
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+
+        pool.unwrap_or_else(|| {
+            panic!(
+                "Failed to connect to test database after {} retries: {:?}",
+                max_retries, last_error
+            )
+        })
+    };
+
+    // Run migrations with exponential backoff retry logic
+    {
+        let max_retries = 5;
+        let mut last_error = None;
+        let mut migration_success = false;
+
+        for attempt in 1..=max_retries {
+            match sqlx::migrate!("./migrations").run(&connection_pool).await {
+                Ok(_) => {
+                    migration_success = true;
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < max_retries {
+                        let delay_ms = 50 * (1 << (attempt - 1));
+                        tracing::debug!(
+                            "Failed to run migrations (attempt {}/{}), retrying in {}ms",
+                            attempt,
+                            max_retries,
+                            delay_ms
+                        );
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+
+        if !migration_success {
+            panic!(
+                "Failed to migrate the database after {} retries: {:?}",
+                max_retries, last_error
+            );
+        }
+    }
 
     connection_pool
 }

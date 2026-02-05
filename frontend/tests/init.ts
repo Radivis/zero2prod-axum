@@ -1,11 +1,16 @@
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import { execSync } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { writeLog } from './helpers';
 import * as TIMEOUTS from './constants';
+import {
+  ensureBinaryExists,
+  spawnBackendProcess,
+  monitorBackendOutput,
+  parseServerInfo,
+} from './backend-spawn-helpers';
 
 // ES module equivalent of __dirname - MUST be defined BEFORE use
 const __filename = fileURLToPath(import.meta.url);
@@ -32,147 +37,44 @@ export interface TestApp {
  */
 export async function spawnTestApp(testName: string): Promise<TestApp> {
   const projectRoot = path.resolve(__dirname, '../..');
-  
-  // Strip e2e- prefix for log file naming if present
   const logFileName = testName.replace(/^e2e-/, '');
   
   writeLog(logFileName, `Starting test app spawn: testName=${testName}`, 'BACKEND');
   
-  // Check if binary exists, if not build it
-  const binaryPath = path.join(projectRoot, 'target', 'release', 'spawn_test_server');
-  const binaryExists = await fs.promises.access(binaryPath).then(() => true).catch(() => false);
+  // Ensure binary exists, building if necessary
+  const binaryPath = await ensureBinaryExists(projectRoot, logFileName);
   
-  if (!binaryExists) {
-    await writeLog(logFileName, 'Binary not found, building spawn_test_server...', 'BACKEND');
-    const cargoBuild = spawn('cargo', ['build', '--bin', 'spawn_test_server', '--features', 'e2e-tests', '--release'], {
-      cwd: projectRoot,
-      stdio: 'pipe',
-    });
-    
-    let buildOutput = '';
-    cargoBuild.stdout?.on('data', (data) => {
-      buildOutput += data.toString();
-    });
-    cargoBuild.stderr?.on('data', (data) => {
-      buildOutput += data.toString();
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      cargoBuild.on('close', async (code) => {
-        if (code === 0) {
-          await writeLog(logFileName, 'Binary build successful', 'BACKEND');
-          resolve();
-        } else {
-          await writeLog(logFileName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
-          reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
-        }
-      });
-      cargoBuild.on('error', async (err) => {
-        await writeLog(logFileName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
-        reject(new Error(`Failed to start cargo build: ${err.message}`));
-      });
-    });
-  } else {
-    writeLog(logFileName, 'Using existing binary', 'BACKEND');
-  }
+  // Spawn the backend process
+  const testServerProcess = spawnBackendProcess(binaryPath, testName, projectRoot);
   
-  // Log file will be created automatically by writeLog function
+  // Monitor output and log to file
+  const monitor = monitorBackendOutput(testServerProcess, logFileName);
   
-  const testServerProcess = spawn(
-    binaryPath,
-    [],
-    {
-      cwd: projectRoot,
-      env: {
-        ...process.env,
-        TEST_NAME: testName,
-        CREATE_USER: 'false', // Always false - users created via makeUser() instead
-        TEST_LOG: '1', // Enable tracing output to stdout for E2E tests
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  );
-
-  let output = '';
-  // Write stdout to log file and capture for parsing
-  testServerProcess.stdout?.on('data', async (data) => {
-    const dataStr = data.toString();
-    output += dataStr;
-    // Only log via writeLog - no direct file writing
-    writeLog(logFileName, `${dataStr}`, 'BACKEND');
-  });
-  
-  // Write stderr to log file
-  testServerProcess.stderr?.on('data', async (data) => {
-    const dataStr = data.toString();
-    // Only log via writeLog - no direct file writing
-    writeLog(logFileName, `${dataStr}`, 'BACKEND');
-  });
-
-  // Wait for the server to output the port information
-  let serverInfo: {
-    port: number;
-    address: string;
-    test_name: string;
-    username?: string;
-    password?: string;
-    user_id?: string;
-  } | null = null;
-  const maxWait = 10000; // 10 seconds
-  const startTime = Date.now();
-
-  while (!serverInfo && Date.now() - startTime < maxWait) {
-    if (output.includes('"address"') && output.includes('"port"')) {
-      try {
-        const lines = output.split('\n');
-        for (const line of lines) {
-          const trimmed = line.trim();
-          // Try to find JSON in the line - it might be prefixed with timestamp/logger output
-          const jsonMatch = trimmed.match(/\{.*"address".*"port".*\}/);
-          if (jsonMatch) {
-            serverInfo = JSON.parse(jsonMatch[0]);
-            break;
-          }
-        }
-      } catch (e) {
-        // Not valid JSON yet, continue waiting
-      }
-    }
-    if (!serverInfo) {
-      await sleep(100);
-    }
-  }
-
-  if (!serverInfo) {
-    testServerProcess.kill();
-    await writeLog(logFileName, `ERROR: Failed to start test server: no port information received. Output: ${output}`, 'BACKEND');
-    throw new Error(`Failed to start test server: no port information received`);
-  }
-
-  await writeLog(logFileName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
-
-  // Wait for the backend server to be ready by checking health endpoint
   try {
+    // Parse server info from output
+    const serverInfo = await parseServerInfo(monitor);
+    
+    await writeLog(logFileName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
+
+    // Wait for backend to be ready
     await writeLog(logFileName, 'Waiting for backend to be ready...', 'BACKEND');
     await waitForBackendReady(serverInfo.address, 30000);
     await writeLog(logFileName, 'Backend is ready', 'BACKEND');
+
+    return {
+      port: serverInfo.port,
+      address: serverInfo.address,
+      testName: serverInfo.test_name,
+      username: serverInfo.username,
+      password: serverInfo.password,
+      userId: serverInfo.user_id,
+      process: testServerProcess,
+    };
   } catch (error) {
     testServerProcess.kill();
-    await writeLog(logFileName, `ERROR: Backend server did not become ready: ${error}`, 'BACKEND');
-    throw new Error(`Backend server did not become ready: ${error}`);
+    await writeLog(logFileName, `ERROR: Backend server startup failed: ${error}`, 'BACKEND');
+    throw error;
   }
-
-  const app: TestApp = {
-    port: serverInfo.port,
-    address: serverInfo.address,
-    testName: serverInfo.test_name,
-    username: serverInfo.username,
-    password: serverInfo.password,
-    userId: serverInfo.user_id,
-    process: testServerProcess,
-  };
-  
-  return app;
 }
 
 /**

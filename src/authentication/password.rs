@@ -175,15 +175,30 @@ pub async fn create_admin_user(
     Ok(user_id)
 }
 
+/// Get Argon2 parameters appropriate for the current context
+/// For E2E tests, use lighter parameters to avoid overwhelming the system
+/// when many password operations run concurrently
+fn get_argon2_params() -> Params {
+    #[cfg(feature = "e2e-tests")]
+    {
+        // Lighter parameters for E2E tests to handle high concurrency
+        // Memory: 8MB (vs 15MB), Time: 1 iteration (vs 2)
+        // Still secure enough for testing, but ~2x faster
+        Params::new(8000, 1, 1, None).unwrap()
+    }
+    #[cfg(not(feature = "e2e-tests"))]
+    {
+        // Production parameters: secure but slower
+        // Memory: 15MB, Time: 2 iterations
+        Params::new(15000, 2, 1, None).unwrap()
+    }
+}
+
 fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
-    let password_hash = Argon2::new(
-        Algorithm::Argon2id,
-        Version::V0x13,
-        Params::new(15000, 2, 1, None).unwrap(),
-    )
-    .hash_password(password.expose_secret().as_bytes(), &salt)?
-    .to_string();
+    let password_hash = Argon2::new(Algorithm::Argon2id, Version::V0x13, get_argon2_params())
+        .hash_password(password.expose_secret().as_bytes(), &salt)?
+        .to_string();
     Ok(Secret::new(password_hash))
 }
 
@@ -195,19 +210,25 @@ fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
 ) -> Result<(), AuthError> {
+    let start = std::time::Instant::now();
     tracing::debug!(
-        "Verifying password hash (candidate length: {})",
+        "Starting password verification (candidate length: {})",
         password_candidate.expose_secret().len()
     );
 
     let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")?;
 
-    Argon2::default()
+    let result = Argon2::default()
         .verify_password(
             password_candidate.expose_secret().as_bytes(),
             &expected_password_hash,
         )
         .context("Invalid password.")
-        .map_err(AuthError::InvalidCredentials)
+        .map_err(AuthError::InvalidCredentials);
+
+    let duration = start.elapsed();
+    tracing::debug!("Password verification completed in {:?}", duration);
+
+    result
 }

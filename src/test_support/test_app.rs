@@ -35,10 +35,12 @@ impl TestUser {
 
     pub async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
+        // Use lighter Argon2 parameters for E2E tests to handle high concurrency
+        // Memory: 8MB (vs 15MB), Time: 1 iteration (vs 2) - ~2x faster
         let password_hash = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
-            Params::new(15000, 2, 1, None).unwrap(),
+            Params::new(8000, 1, 1, None).unwrap(),
         )
         .hash_password(self.password.as_bytes(), &salt)
         .unwrap()

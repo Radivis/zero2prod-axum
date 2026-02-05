@@ -1,10 +1,17 @@
 import { test as base, Page } from '@playwright/test';
 import { spawnTestApp, stopTestApp, TestApp, waitForBackendReady } from './init';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { writeLog } from './helpers';
 import * as TIMEOUTS from './constants';
+import {
+  spawnViteProcess,
+  monitorViteOutput,
+  waitForViteStart,
+  waitForFrontendAccessible,
+  killViteProcess,
+} from './frontend-server-helpers';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -34,8 +41,39 @@ export interface TestUser {
 }
 
 /**
+ * Retry a user creation operation with exponential backoff
+ * Handles transient failures due to database contention
+ */
+async function retryUserCreation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      
+      if (attempt < maxRetries) {
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const delayMs = 100 * Math.pow(2, attempt - 1);
+        await writeLog('makeUser', `Attempt ${attempt} failed, retrying in ${delayMs}ms...`, 'TEST');
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Creates a user via the REST API using the /initial_password endpoint.
  * This is the proper way to create users in E2E tests - through the actual API.
+ * 
+ * Includes retry logic with exponential backoff to handle database contention
+ * when multiple tests run in parallel.
  * 
  * @param backendAddress - The backend server address (e.g., http://127.0.0.1:12345)
  * @param username - The username for the new user
@@ -47,8 +85,9 @@ export async function makeUser(
   username: string,
   password: string
 ): Promise<MakeUserResult> {
-  try {
-    const response = await fetch(`${backendAddress}/initial_password`, {
+  return retryUserCreation(async () => {
+    try {
+      const response = await fetch(`${backendAddress}/initial_password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,6 +110,12 @@ export async function makeUser(
       
       await writeLog('makeUser', `Failed to create user: ${response.status} ${response.statusText}`, 'TEST');
       await writeLog('makeUser', `Response body: ${responseText}`, 'TEST');
+      
+      // Retry on server errors (5xx), but not client errors (4xx)
+      if (response.status >= 500) {
+        await writeLog('makeUser', `Server error (${response.status}), will retry`, 'TEST');
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
       
       return {
         success: false,
@@ -120,25 +165,19 @@ export async function makeUser(
     // Helps prevent race conditions with high parallelism
     await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAY_REDIS_READY));
     
-    return {
-      success: true,
-      username,
-      password,
-      userId: data.user_id,
-    };
-  } catch (error: any) {
-    await writeLog('makeUser', `Network error: ${error.message || error}`, 'TEST');
-    return {
-      success: false,
-      error: {
-        status: 0,
-        statusText: 'Network Error',
-        error: error.message || 'Failed to create user',
-      },
-      username,
-      password,
-    };
-  }
+      return {
+        success: true,
+        username,
+        password,
+        userId: data.user_id,
+      };
+    } catch (error: any) {
+      await writeLog('makeUser', `Network error: ${error.message || error}`, 'TEST');
+      
+      // Throw to trigger retry for network errors
+      throw error;
+    }
+  }, 3);  // Retry up to 3 times
 }
 
 export async function login(
@@ -151,6 +190,17 @@ export async function login(
     // Login via the browser
     await writeLog(logFileName, 'Starting browser login...', 'TEST');
     await page.goto(`${frontendServer.url}/login`);
+    
+    // Wait for page to be fully loaded
+    await page.waitForLoadState('domcontentloaded');
+    
+    // Verify we're on the login page
+    const currentUrl = page.url();
+    if (!currentUrl.includes('/login')) {
+        throw new Error(`Expected to be on login page, but current URL is: ${currentUrl}`);
+    }
+    await writeLog(logFileName, `Confirmed on login page: ${currentUrl}`, 'TEST');
+    
     await writeLog(logFileName, `Filling login form with username: ${username}`, 'TEST');
     await page.getByLabel('Username').fill(username);
     await page.getByLabel('Password').fill(password);
@@ -169,13 +219,40 @@ export async function login(
       try {
         const loginBody = await response.json();
         errorMessage += `: ${loginBody.error}`;
-      } catch {
-        errorMessage += `: Cannot parse login response body`;
+      } catch (parseError) {
+        // Try to get the raw response text for debugging
+        try {
+          const responseText = await response.text();
+          await writeLog(logFileName, `Login failed - raw response body: ${responseText}`, 'TEST');
+          errorMessage += `: Cannot parse login response body (raw: ${responseText.substring(0, 200)})`;
+        } catch {
+          await writeLog(logFileName, `Login failed - could not read response body at all`, 'TEST');
+          errorMessage += `: Cannot parse login response body (body unreadable)`;
+        }
       }
       throw new Error(errorMessage);
     }
+    
     const loginBody = await response.json();
-    writeLog(logFileName, `Login response: ${loginStatus} - ${loginBody}`, 'TEST');
+    writeLog(logFileName, `Login response: ${loginStatus} - ${JSON.stringify(loginBody)}`, 'TEST');
+    
+    // Wait for navigation to dashboard to complete
+    await writeLog(logFileName, 'Waiting for navigation to dashboard...', 'TEST');
+    await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
+    
+    // Verify we're on the dashboard page
+    const dashboardUrl = page.url();
+    if (!dashboardUrl.includes('/admin/dashboard')) {
+        throw new Error(`Expected to be on dashboard page after login, but current URL is: ${dashboardUrl}`);
+    }
+    
+    // Wait for dashboard to be fully loaded (important for subsequent navigations)
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      // If networkidle times out, at least wait for domcontentloaded
+      return page.waitForLoadState('domcontentloaded');
+    });
+    
+    await writeLog(logFileName, `Login complete, dashboard loaded at: ${dashboardUrl}`, 'TEST');
 }
 
 // Frontend server type
@@ -228,7 +305,6 @@ export const test = base.extend<TestFixtures>({
   // Frontend server fixture - returns { process, port, url }
   frontendServer: async ({ backendApp }, use, testInfo) => {
     const app = backendApp;
-    // Log file name without e2e- prefix
     const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
     
     // Ensure backend is ready before starting frontend
@@ -240,146 +316,30 @@ export const test = base.extend<TestFixtures>({
     
     await writeLog(logFileName, `Starting Vite dev server with backend port ${app.port}`, 'FRONTEND');
     
-    // Start Vite dev server with the backend port
-    const viteProcess = spawn('npm', ['run', 'dev'], {
-      cwd: path.join(__dirname, '..'),
-      env: {
-        ...process.env,
-        BACKEND_PORT: app.port.toString(),
-      },
-      stdio: 'pipe',
-      detached: false,
-      ...(process.platform !== 'win32' && { 
-        shell: false,
-      }),
-    });
+    // Spawn Vite process
+    const viteProcess = spawnViteProcess(app.port);
     
-    // On Unix, set the process group so we can kill all children
-    if (process.platform !== 'win32' && viteProcess.pid) {
-      try {
-        process.kill(-viteProcess.pid, 0);
-      } catch (e) {
-        // If we can't set process group, that's okay
-      }
-    }
-
-    // Wait for Vite to be ready and extract the port
-    let viteReady = false;
-    let viteError = '';
-    let frontendPort: number | null = null; // Will be extracted from output
-    let fullOutput = '';
+    // Monitor output for port and readiness
+    const monitor = monitorViteOutput(viteProcess, logFileName);
     
-    // Helper function to strip ANSI escape codes
-    const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
-    
-    viteProcess.stdout?.on('data', (data) => {
-      const output = data.toString();
-      fullOutput += output;
-      const trimmed = output.trim();
-      if (trimmed) {
-        writeLog(logFileName, trimmed, 'FRONTEND');
-      }
-      
-      // Extract port from Vite output like "➜  Local:   http://localhost:3003/"
-      // Strip ANSI color codes first to handle colored terminal output
-      const cleanOutput = stripAnsi(output);
-      const portMatch = cleanOutput.match(/Local:\s+http:\/\/localhost:(\d+)/);
-      if (portMatch) {
-        frontendPort = parseInt(portMatch[1], 10);
-        writeLog(logFileName, `Detected frontend port: ${frontendPort}`, 'TEST');
-      }
-      
-      if (cleanOutput.includes('Local:') || cleanOutput.includes('ready') || cleanOutput.includes('VITE')) {
-        viteReady = true;
-      }
-    });
-    
-    viteProcess.stderr?.on('data', (data) => {
-      const output = data.toString();
-      viteError += output;
-      const trimmed = output.trim();
-      if (trimmed) {
-        writeLog(logFileName, trimmed, 'FRONTEND');
-      }
-    });
-
-    // Wait up to 10 seconds for Vite to start AND port to be detected
-    const maxWait = 10000;
-    const startTime = Date.now();
-    while ((!viteReady || frontendPort === null) && Date.now() - startTime < maxWait) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    if (!viteReady) {
-      viteProcess.kill();
-      throw new Error(`Vite server did not start in time. Stderr: ${viteError}`);
-    }
-
-    if (frontendPort === null) {
-      viteProcess.kill();
-      throw new Error(`Failed to detect frontend port within ${maxWait}ms. Output: ${fullOutput}`);
-    }
-
-    // Wait for frontend to actually be accessible
-    let frontendAccessible = false;
-    const frontendCheckStart = Date.now();
-    const frontendMaxWait = 12000;
-    const frontendUrl = `http://localhost:${frontendPort}`;
-    
-    await writeLog(logFileName, `Checking frontend accessibility at ${frontendUrl}`, 'TEST');
-    
-    while (!frontendAccessible && Date.now() - frontendCheckStart < frontendMaxWait) {
-      try {
-        const response = await fetch(frontendUrl);
-        frontendAccessible = true;
-      } catch (error) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-    
-    if (!frontendAccessible) {
-      viteProcess.kill();
-      throw new Error(`Frontend server did not become accessible at ${frontendUrl} within ${frontendMaxWait}ms`);
-    }
-    
-    await writeLog(logFileName, `Frontend server accessible at ${frontendUrl}`, 'TEST');
-    
-    // Give React a moment to hydrate
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    await use({ process: viteProcess, port: frontendPort, url: frontendUrl });
-
-    // Cleanup - kill Vite process and all its children
-    await writeLog(logFileName, 'Stopping Vite dev server', 'FRONTEND');
     try {
-      if (viteProcess.process.pid && !viteProcess.process.killed) {
-        if (process.platform !== 'win32') {
-          try {
-            process.kill(-viteProcess.process.pid, 'SIGTERM');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            try {
-              process.kill(-viteProcess.process.pid, 'SIGKILL');
-            } catch (e) {
-              // Process group might already be dead
-            }
-          } catch (e) {
-            viteProcess.process.kill('SIGTERM');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (!viteProcess.process.killed) {
-              viteProcess.process.kill('SIGKILL');
-            }
-          }
-        } else {
-          viteProcess.process.kill('SIGTERM');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          if (!viteProcess.process.killed) {
-            viteProcess.process.kill('SIGKILL');
-          }
-        }
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for Vite to start and extract port
+      const frontendPort = await waitForViteStart(monitor);
+      const frontendUrl = `http://localhost:${frontendPort}`;
+      
+      // Wait for frontend to be accessible
+      await waitForFrontendAccessible(frontendUrl, logFileName);
+      
+      // Give React a moment to hydrate
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      await use({ process: viteProcess, port: frontendPort, url: frontendUrl });
     } catch (error) {
-      // Ignore errors during cleanup
+      viteProcess.kill();
+      throw error;
+    } finally {
+      // Cleanup - kill Vite process and all its children
+      await killViteProcess(viteProcess, logFileName);
     }
   },
 
@@ -421,7 +381,16 @@ export const test = base.extend<TestFixtures>({
     // Wait for successful login (redirect to dashboard)
     await writeLog(logFileName, 'Waiting for redirect to dashboard...', 'TEST');
     await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
-    await writeLog(logFileName, 'Browser login successful', 'TEST');
+    
+    // Verify we're on the dashboard page
+    const dashboardUrl = page.url();
+    if (!dashboardUrl.includes('/admin/dashboard')) {
+        throw new Error(`Expected to be on dashboard page after login in authenticatedPage fixture, but current URL is: ${dashboardUrl}`);
+    }
+    
+    // Wait for dashboard to be fully loaded before starting tests
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await writeLog(logFileName, `Dashboard loaded at ${dashboardUrl}, ready for test`, 'TEST');
 
     // Pass page along with credentials so tests can use them
     await use({ page, username, password });
