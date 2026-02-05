@@ -36,15 +36,32 @@ pub async fn validate_credentials(
             .await
             .map_err(AuthError::UnexpectedError)?
     {
+        eprintln!(
+            "[AUTH DEBUG] Found user in database: user_id={}, password_hash_len={}",
+            stored_user_id,
+            stored_password_hash.expose_secret().len()
+        );
+        eprintln!(
+            "[AUTH DEBUG] Stored password hash starts with: {}",
+            &stored_password_hash.expose_secret()
+                [..std::cmp::min(50, stored_password_hash.expose_secret().len())]
+        );
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
+    } else {
+        eprintln!("[AUTH DEBUG] User NOT found in database!");
     }
 
-    spawn_blocking_with_tracing(move || {
+    let verify_result = spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
     .await
-    .context("Failed to spawn blocking task.")??;
+    .context("Failed to spawn blocking task.")?;
+
+    // Note: Password verification success/failure could be logged to an access.log
+    // file together with the username for security auditing purposes
+
+    verify_result?;
 
     // This is only set to `Some` if we found credentials in the store
     // So, even if the default password ends up matching (somehow)
@@ -84,6 +101,24 @@ async fn get_stored_credentials(
     username: &str,
     pool: &PgPool,
 ) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
+    let all_users = sqlx::query!("SELECT username FROM users LIMIT 10")
+        .fetch_all(pool)
+        .await;
+
+    match all_users {
+        Ok(users) => {
+            eprintln!("[GET_CREDS DEBUG] Found {} users in database", users.len());
+            for user in users {
+                eprintln!("[GET_CREDS DEBUG]   - User: {}", user.username);
+            }
+        }
+        Err(e) => {
+            eprintln!("[GET_CREDS DEBUG] Error fetching users: {:?}", e);
+        }
+    }
+
+    eprintln!("[GET_CREDS DEBUG] Looking for username: {}", username);
+
     let row = sqlx::query!(
         r#"
         SELECT user_id, password_hash
@@ -99,15 +134,71 @@ async fn get_stored_credentials(
     Ok(row)
 }
 
+#[tracing::instrument(name = "Check if users exist", skip(pool))]
+pub async fn check_users_exist(pool: &PgPool) -> Result<bool, anyhow::Error> {
+    let count = sqlx::query!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM users
+        "#
+    )
+    .fetch_one(pool)
+    .await
+    .context("Failed to check if users exist.")?;
+    Ok(count.count.unwrap_or(0) > 0)
+}
+
+#[tracing::instrument(name = "Create admin user", skip(password, pool))]
+pub async fn create_admin_user(
+    username: String,
+    password: Secret<String>,
+    pool: &PgPool,
+) -> Result<uuid::Uuid, anyhow::Error> {
+    let user_id = uuid::Uuid::new_v4();
+    let password_hash = spawn_blocking_with_tracing(move || compute_password_hash(password))
+        .await?
+        .context("Failed to hash password")?;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO users (user_id, username, password_hash)
+        VALUES ($1, $2, $3)
+        "#,
+        user_id,
+        username,
+        password_hash.expose_secret(),
+    )
+    .execute(pool)
+    .await
+    .context("Failed to create admin user in the database.")?;
+
+    Ok(user_id)
+}
+
+/// Get Argon2 parameters appropriate for the current context
+/// For E2E tests, use lighter parameters to avoid overwhelming the system
+/// when many password operations run concurrently
+fn get_argon2_params() -> Params {
+    #[cfg(feature = "e2e-tests")]
+    {
+        // Lighter parameters for E2E tests to handle high concurrency
+        // Memory: 8MB (vs 15MB), Time: 1 iteration (vs 2)
+        // Still secure enough for testing, but ~2x faster
+        Params::new(8000, 1, 1, None).unwrap()
+    }
+    #[cfg(not(feature = "e2e-tests"))]
+    {
+        // Production parameters: secure but slower
+        // Memory: 15MB, Time: 2 iterations
+        Params::new(15000, 2, 1, None).unwrap()
+    }
+}
+
 fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
-    let password_hash = Argon2::new(
-        Algorithm::Argon2id,
-        Version::V0x13,
-        Params::new(15000, 2, 1, None).unwrap(),
-    )
-    .hash_password(password.expose_secret().as_bytes(), &salt)?
-    .to_string();
+    let password_hash = Argon2::new(Algorithm::Argon2id, Version::V0x13, get_argon2_params())
+        .hash_password(password.expose_secret().as_bytes(), &salt)?
+        .to_string();
     Ok(Secret::new(password_hash))
 }
 
@@ -119,14 +210,25 @@ fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
 ) -> Result<(), AuthError> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        "Starting password verification (candidate length: {})",
+        password_candidate.expose_secret().len()
+    );
+
     let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")?;
 
-    Argon2::default()
+    let result = Argon2::default()
         .verify_password(
             password_candidate.expose_secret().as_bytes(),
             &expected_password_hash,
         )
         .context("Invalid password.")
-        .map_err(AuthError::InvalidCredentials)
+        .map_err(AuthError::InvalidCredentials);
+
+    let duration = start.elapsed();
+    tracing::debug!("Password verification completed in {:?}", duration);
+
+    result
 }

@@ -11,15 +11,23 @@ use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
+use crate::routes::constants::ERROR_AUTHENTICATION_REQUIRED;
 use crate::routes::{
-    admin_dashboard, change_password, change_password_form, confirm, health_check, home, log_out,
-    login, login_form, publish_newsletter, publish_newsletter_form, subscribe,
+    auth_check_endpoint, change_password, check_users_exist_endpoint, confirm,
+    create_initial_password, health_check, log_out, login, publish_newsletter, subscribe,
 };
 use axum::extract::FromRequestParts;
 use axum::extract::Request;
+use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Json};
 use tower_sessions::Expiry;
+
+#[derive(serde::Serialize)]
+struct AuthErrorResponse {
+    success: bool,
+    error: String,
+}
 
 pub fn get_connection_pool(db_configuration: &DatabaseSettings) -> PgPool {
     PgPoolOptions::new().connect_lazy_with(db_configuration.connect_options())
@@ -99,19 +107,17 @@ impl Application {
 
         let app = Router::new()
             .route("/health_check", get(health_check))
-            .route("/", get(home))
-            .route("/login", get(login_form).post(login))
+            .route("/api/users/exists", get(check_users_exist_endpoint))
+            .route("/api/auth/me", get(auth_check_endpoint))
+            .route("/login", post(login))
+            .route("/initial_password", post(create_initial_password))
             .route("/subscriptions", post(subscribe))
             .route("/subscriptions/confirm", get(confirm))
             .nest(
                 "/admin",
                 Router::new()
-                    .route("/dashboard", get(admin_dashboard))
-                    .route(
-                        "/newsletters",
-                        get(publish_newsletter_form).post(publish_newsletter),
-                    )
-                    .route("/password", get(change_password_form).post(change_password))
+                    .route("/newsletters", post(publish_newsletter))
+                    .route("/password", post(change_password))
                     .route("/logout", post(log_out))
                     .route_layer(axum::middleware::from_fn(require_auth)),
             )
@@ -127,12 +133,23 @@ impl Application {
 
 async fn require_auth(req: Request, next: Next) -> axum::response::Response {
     let (mut parts, body) = req.into_parts();
+    // All /admin/* routes are API-only, so always return JSON for auth failures
     match UserId::from_request_parts(&mut parts, &()).await {
         Ok(user_id) => {
             parts.extensions.insert(user_id);
             let req = Request::from_parts(parts, body);
             next.run(req).await
         }
-        Err(redirect) => redirect.into_response(),
+        Err(_redirect) => {
+            // Return JSON error for API requests (all /admin routes are API-only)
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthErrorResponse {
+                    success: false,
+                    error: ERROR_AUTHENTICATION_REQUIRED.to_string(),
+                }),
+            )
+                .into_response()
+        }
     }
 }

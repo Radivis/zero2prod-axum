@@ -33,3 +33,10 @@ pre-commit:
       run: cargo clippy --workspace --all-targets
     test-compile:
       run: cargo test --workspace --no-run
+
+post-commit:
+  commands:
+    e2e-tests:
+      run: ./scripts/run-e2e-background.sh &
+      # Runs E2E tests in background, opens report on failure
+      priority: 1

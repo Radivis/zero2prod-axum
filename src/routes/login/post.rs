@@ -1,8 +1,9 @@
-use crate::flash_messages::FlashMessageSender;
+use crate::routes::constants::{ERROR_AUTHENTICATION_FAILED, ERROR_SOMETHING_WENT_WRONG};
 use crate::session_state::TypedSession;
 use crate::startup::AppState;
-use axum::extract::{Form, State};
-use axum::response::Redirect;
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use secrecy::Secret;
 use tower_sessions::Session;
 
@@ -14,6 +15,13 @@ pub struct FormData {
     password: Secret<String>,
 }
 
+#[derive(serde::Serialize)]
+pub struct LoginResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
 #[tracing::instrument(
     skip(form, state, session),
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
@@ -21,9 +29,8 @@ pub struct FormData {
 pub async fn login(
     session: Session,
     State(state): State<AppState>,
-    Form(form): Form<FormData>,
+    Json(form): Json<FormData>,
 ) -> impl axum::response::IntoResponse {
-    let typed_session = TypedSession(session.clone());
     let credentials = Credentials {
         username: form.username,
         password: form.password,
@@ -33,23 +40,44 @@ pub async fn login(
     match validate_credentials(credentials, &state.db).await {
         Ok(user_id) => {
             tracing::Span::current().record("user_id", tracing::field::display(&user_id));
-            typed_session.renew().await;
+            // Use the session directly (don't clone) to ensure changes persist
+            let typed_session = TypedSession(session);
+            // Insert user_id first, then renew the session
             if let Err(e) = typed_session.insert_user_id(user_id).await {
                 tracing::error!("Failed to insert user_id into session: {:?}", e);
-                return Redirect::to("/login");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(LoginResponse {
+                        success: false,
+                        error: Some("Failed to insert user_id into session".to_string()),
+                    }),
+                )
+                    .into_response();
             }
-            Redirect::to("/admin/dashboard")
+            // Renew the session after inserting user_id to extend its lifetime
+            typed_session.renew().await;
+            (
+                StatusCode::OK,
+                Json(LoginResponse {
+                    success: true,
+                    error: None,
+                }),
+            )
+                .into_response()
         }
         Err(e) => {
-            let flash_sender = FlashMessageSender::new(session);
             let error_msg = match e {
-                AuthError::InvalidCredentials(_) => "Authentication failed".to_string(),
-                AuthError::UnexpectedError(_) => "Something went wrong".to_string(),
+                AuthError::InvalidCredentials(_) => ERROR_AUTHENTICATION_FAILED,
+                AuthError::UnexpectedError(_) => ERROR_SOMETHING_WENT_WRONG,
             };
-            if let Err(err) = flash_sender.error(error_msg).await {
-                tracing::error!("Failed to set flash message: {:?}", err);
-            }
-            Redirect::to("/login")
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(LoginResponse {
+                    success: false,
+                    error: Some(error_msg.to_string()),
+                }),
+            )
+                .into_response()
         }
     }
 }

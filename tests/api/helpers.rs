@@ -1,18 +1,12 @@
-use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version, password_hash::SaltString};
 use once_cell::sync::Lazy;
-use secrecy::Secret;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
-use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate, Times};
 
-use zero2prod::configuration::{DatabaseSettings, get_configuration};
-use zero2prod::email_client::EmailClient;
-use zero2prod::issue_delivery_worker::{ExecutionOutcome, try_execute_task};
-use zero2prod::startup::Application;
+use zero2prod::configuration::DatabaseSettings;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 // This holds the guard for the entire lifetime of the test process
@@ -20,7 +14,7 @@ static LOG_GUARD: Lazy<Mutex<Option<WorkerGuard>>> = Lazy::new(|| Mutex::new(Non
 
 // Ensure that the `tracing` stack is only initialised once using `LazyLock`
 
-static TRACING: LazyLock<()> = LazyLock::new(|| {
+pub static TRACING: LazyLock<()> = LazyLock::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
     let loglevel = std::env::var("LOGLEVEL").unwrap_or(default_filter_level);
@@ -39,12 +33,12 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 
 pub fn test_writer() -> NonBlocking {
     // nextest passes the test name via --exact argument
-    // uncomment the next line and run "cargo test --no-capture" to see how the args are structured:
+    // uncomment the next line and run "cargo test" to see how the args are structured:
     // std::env::args().for_each(|arg| println!("Environment argument: {}", arg));
     let test_name = std::env::args()
         .skip_while(|arg| arg != "--exact")
         .nth(1) // we need the first arg exactly after "--exact"
-        .and_then(|arg| arg.split("::").last().map(str::to_owned))
+        .map(|arg| arg.replace("::", "-").to_string())
         .unwrap_or("unlabeled_test".into())
         .replace(' ', "_");
 
@@ -72,294 +66,47 @@ pub struct ConfirmationLinks {
     pub plain_text: reqwest::Url,
 }
 
-#[derive(Debug)]
-pub struct TestApp {
-    pub address: String,
-    pub port: u16,
-    pub db_connection_pool: PgPool,
-    pub email_client: EmailClient,
-    pub email_server: MockServer,
-    pub api_client: reqwest::Client,
-}
-
-pub struct TestAppContainerWithUser {
-    pub app: TestApp,
-    pub test_user: TestUser,
-}
-
-impl TestAppContainerWithUser {
-    pub async fn login(self) -> Self {
-        let response = self
-            .app
-            .post_login(&serde_json::json!({
-                "username": self.test_user.username,
-                "password": self.test_user.password
-            }))
-            .await;
-        assert_is_redirect_to(&response, "/admin/dashboard");
-        self
-    }
-}
-
-impl TestApp {
-    pub async fn dispatch_all_pending_emails(&self) {
-        loop {
-            if let ExecutionOutcome::EmptyQueue =
-                try_execute_task(&self.db_connection_pool, &self.email_client)
-                    .await
-                    .unwrap()
-            {
-                break;
-            }
-        }
-    }
-
-    // Our tests will only look at the HTML page, therefore
-    // we do not expose the underlying reqwest::Response
-
-    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/dashboard", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-    pub async fn get_admin_dashboard_html(&self) -> String {
-        self.get_admin_dashboard().await.text().await.unwrap()
-    }
-
-    pub async fn get_change_password(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/password", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_change_password_html(&self) -> String {
-        self.get_change_password().await.text().await.unwrap()
-    }
-
-    pub async fn post_logout(&self) -> reqwest::Response {
-        self.api_client
-            .post(format!("{}/admin/logout", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
-    where
-        Body: serde::Serialize,
-    {
-        self.api_client
-            .post(format!("{}/admin/password", &self.address))
-            .form(body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_login_html(&self) -> String {
-        self.api_client
-            .get(format!("{}/login", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-            .text()
-            .await
-            .unwrap()
-    }
-
-    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
-    where
-        Body: serde::Serialize,
-    {
-        self.api_client
-            .post(format!("{}/login", &self.address))
-            // This `reqwest` method makes sure that the body is URL-encoded
-            // and the `Content-Type` header is set accordingly.
-            .form(body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn get_newsletters(&self) -> reqwest::Response {
-        self.api_client
-            .get(format!("{}/admin/newsletters", &self.address))
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn post_newsletters<Body>(&self, body: &Body) -> reqwest::Response
-    where
-        Body: serde::Serialize,
-    {
-        self.api_client
-            .post(format!("{}/admin/newsletters", &self.address))
-            .form(body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
-        self.api_client
-            .post(format!("{}/subscriptions", &self.address))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
-    }
-
-    /// Extract the confirmation links embedded in the request to the email API.
-    pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
-        let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
-        // Extract the link from one of the request fields.
-        let get_link = |s: &str| {
-            let links: Vec<_> = linkify::LinkFinder::new()
-                .links(s)
-                .filter(|l| *l.kind() == linkify::LinkKind::Url)
-                .collect();
-            assert_eq!(links.len(), 1);
-            let raw_link = links[0].as_str().to_owned();
-            let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
-            // Let's make sure we don't call random APIs on the web
-            assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
-            confirmation_link.set_port(Some(self.port)).unwrap();
-            confirmation_link
-        };
-
-        let html = get_link(body["HtmlBody"].as_str().unwrap());
-        let plain_text = get_link(body["TextBody"].as_str().unwrap());
-        ConfirmationLinks { html, plain_text }
-    }
-
-    pub async fn _get_test_user(&self) -> (String, String) {
-        let row = sqlx::query!("SELECT username, password_hash FROM users LIMIT 1",)
-            .fetch_one(&self.db_connection_pool)
-            .await
-            .expect("Failed to create test users.");
-        (row.username, row.password_hash)
-    }
-
-    pub async fn make_container_with_user(self) -> TestAppContainerWithUser {
-        let test_user = TestUser::generate();
-        test_user.store(&self.db_connection_pool).await;
-        TestAppContainerWithUser {
-            app: self,
-            test_user,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct TestUser {
-    pub user_id: Uuid,
-    pub username: String,
-    pub password: String,
-}
-
-impl TestUser {
-    pub fn generate() -> Self {
-        Self {
-            user_id: Uuid::new_v4(),
-            username: Uuid::new_v4().to_string(),
-            password: Uuid::new_v4().to_string(),
-        }
-    }
-
-    async fn store(&self, pool: &PgPool) {
-        let salt = SaltString::generate(&mut rand::thread_rng());
-        // Match parameters of the default password
-        let password_hash = Argon2::new(
-            Algorithm::Argon2id,
-            Version::V0x13,
-            Params::new(15000, 2, 1, None).unwrap(),
-        )
-        .hash_password(self.password.as_bytes(), &salt)
-        .unwrap()
-        .to_string();
-        sqlx::query!(
-            "INSERT INTO users (user_id, username, password_hash)
-            VALUES ($1, $2, $3)",
-            self.user_id,
-            self.username,
-            password_hash,
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to store test user.");
-    }
-}
-
-#[tracing::instrument(name = "Spawning test application")]
-pub async fn spawn_app() -> TestApp {
-    // The first time `initialize` is invoked the code in `TRACING` is executed.
-    // All other invocations will instead skip execution.
-    LazyLock::force(&TRACING);
-
-    // Launch a mock server to stand in for Postmark's API
-    let email_server = MockServer::start().await;
-
-    // Randomise configuration to ensure test isolation
-    let configuration = {
-        let mut c = get_configuration().expect("Failed to read configuration.");
-        // Use a different database for each test case
-        c.database.database_name = format!("test_{}", Uuid::new_v4());
-        // Use a random OS port
-        c.application.port = 0;
-        c.email_client.base_url = email_server.uri();
-        c
-    };
-
-    let db_connection_pool = configure_database(&configuration.database).await;
-
-    // Notice the .clone!
-    let application = Application::build(configuration.clone())
-        .await
-        .expect("Failed to build application.");
-    let address = format!("http://127.0.0.1:{}", application.port());
-    let port = application.port();
-
-    #[allow(clippy::let_underscore_future)]
-    let _ = tokio::spawn(application.run_until_stopped(configuration.clone()));
-
-    let api_client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .cookie_store(true)
-        .build()
-        .unwrap();
-
-    TestApp {
-        address,
-        port,
-        db_connection_pool,
-        email_client: configuration.email_client.client(),
-        email_server,
-        api_client,
-    }
-}
-
-#[tracing::instrument(name = "Spawning test application with user")]
-pub async fn spawn_app_container_with_user() -> TestAppContainerWithUser {
-    spawn_app().await.make_container_with_user().await
-}
-
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    // Create database
+    // Safety check: only allow dropping test databases
+    assert!(
+        config.database_name.starts_with("test-"),
+        "Safety check failed: configure_database should only be used with test databases (name must start with 'test-')"
+    );
+
+    // Use the postgres maintenance database with the same credentials
+    // In test environments, these credentials are configured via configuration files
     let maintenance_settings = DatabaseSettings {
         database_name: "postgres".to_string(),
-        username: "postgres".to_string(),
-        password: Secret::new("STOPSERG!2345already".to_string()),
         ..config.clone()
     };
     let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to Postgres");
+
+    // Terminate all connections to the database before dropping it
+    connection
+        .execute(
+            format!(
+                r#"
+                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                FROM pg_stat_activity
+                WHERE pg_stat_activity.datname = '{}'
+                  AND pid <> pg_backend_pid();
+                "#,
+                config.database_name
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to terminate connections");
+
+    // Drop database from previous test
+    connection
+        .execute(format!(r#"DROP DATABASE IF EXISTS "{}";"#, config.database_name).as_str())
+        .await
+        .expect("Failed to drop database.");
+
+    // Create database
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
@@ -389,9 +136,25 @@ pub async fn mount_mock_email_server(
     }
 }
 
-pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), location);
+pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
+    assert_eq!(response.status().as_u16(), expected_status);
+    assert_eq!(
+        response.headers().get("Content-Type").unwrap(),
+        "application/json"
+    );
+}
+
+pub async fn assert_json_response<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+) -> T {
+    assert_eq!(
+        response.headers().get("Content-Type").unwrap(),
+        "application/json"
+    );
+    response
+        .json()
+        .await
+        .expect("Failed to parse JSON response")
 }
 
 pub async fn retry<F, Fut, T>(mut f: F, max_retries: u8) -> T

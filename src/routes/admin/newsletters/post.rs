@@ -1,10 +1,8 @@
-use crate::flash_messages::FlashMessageSender;
 use crate::startup::AppState;
 use anyhow::Context;
-use axum::extract::{Form, State};
+use axum::extract::{Json, State};
 use axum::http::{HeaderValue, StatusCode, header};
-use axum::response::{IntoResponse, Redirect, Response};
-use tower_sessions::Session;
+use axum::response::{IntoResponse, Response};
 
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
@@ -25,6 +23,15 @@ pub struct SendNewsletterFormData {
 #[allow(dead_code)]
 struct ConfirmedSubscriber {
     email: SubscriberEmailAddress,
+}
+
+#[derive(serde::Serialize)]
+pub struct PublishNewsletterResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
 }
 
 #[derive(thiserror::Error)]
@@ -116,14 +123,13 @@ async fn enqueue_delivery_tasks(
 // Axum version
 #[tracing::instrument(
     name = "Publish Newsletter",
-    skip(form, state, user_id, session)
+    skip(form, state, user_id)
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 pub async fn publish_newsletter(
     user_id: UserId,
-    session: Session,
     State(state): State<AppState>,
-    Form(form): Form<SendNewsletterFormData>,
+    Json(form): Json<SendNewsletterFormData>,
 ) -> Result<impl IntoResponse, PublishError> {
     let SendNewsletterFormData {
         title,
@@ -134,6 +140,19 @@ pub async fn publish_newsletter(
     let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(|e| {
         PublishError::UnexpectedError(anyhow::anyhow!("Invalid idempotency key: {}", e))
     })?;
+
+    let success_response = (
+        StatusCode::OK,
+        Json(PublishNewsletterResponse {
+            success: true,
+            error: None,
+            message: Some(
+                "The newsletter issue has been accepted - emails will go out shortly.".to_string(),
+            ),
+        }),
+    )
+        .into_response();
+
     let mut transaction = match try_processing(&state.db, &idempotency_key, *user_id).await? {
         NextAction::StartProcessing(t) => t,
         NextAction::ReturnSavedResponse(saved_response) => {
@@ -141,14 +160,43 @@ pub async fn publish_newsletter(
                 "Returning saved response due to idempotency: {:?}",
                 saved_response.status()
             );
-            let flash_sender = FlashMessageSender::new(session.clone());
-            if let Err(e) = flash_sender
-                .info("The newsletter issue has been accepted - emails will go out shortly.")
-                .await
+            // Always return JSON response - convert old redirect responses to JSON
+            // This ensures we maintain a clean JSON API regardless of what was saved before
+            if saved_response.status() == StatusCode::SEE_OTHER
+                || saved_response.status() == StatusCode::FOUND
+                || saved_response.status() == StatusCode::TEMPORARY_REDIRECT
+                || saved_response.status() == StatusCode::PERMANENT_REDIRECT
             {
-                tracing::error!("Failed to set flash message: {:?}", e);
+                return Ok(success_response);
             }
-            return Ok(saved_response);
+            // For non-redirect saved responses, check if it's JSON
+            // If not, convert to JSON format
+            let (parts, body) = saved_response.into_parts();
+            let body_bytes = axum::body::to_bytes(body, usize::MAX).await.map_err(|e| {
+                PublishError::UnexpectedError(anyhow::anyhow!(
+                    "Failed to read saved response body: {}",
+                    e
+                ))
+            })?;
+
+            // Check if the saved response is JSON by checking Content-Type header
+            // This is needed because the backend was changed to be a JSON API server
+            // with the addition of React in the frontend
+            let is_json = parts
+                .headers
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|h| h.to_str().ok())
+                .map(|ct| ct.starts_with("application/json"))
+                .unwrap_or(false);
+
+            if is_json {
+                // Return the saved JSON response as-is
+                return Ok((parts.status, parts.headers, body_bytes).into_response());
+            } else {
+                // Convert non-JSON saved response to JSON format
+                tracing::warn!("Converting non-JSON saved response to JSON format");
+                return Ok(success_response);
+            }
         }
     };
 
@@ -165,27 +213,36 @@ pub async fn publish_newsletter(
         .await
         .context("Failed to enqueue delivery tasks")?;
 
-    let flash_sender = FlashMessageSender::new(session);
-    if let Err(e) = flash_sender
-        .info("The newsletter issue has been accepted - emails will go out shortly.")
-        .await
-    {
-        tracing::error!("Failed to set flash message: {:?}", e);
-    }
-    let response = Redirect::to("/admin/newsletters").into_response();
-    let response = save_response(transaction, &idempotency_key, *user_id, response).await?;
+    let response = save_response(transaction, &idempotency_key, *user_id, success_response).await?;
     Ok(response)
 }
 
 impl IntoResponse for PublishError {
     fn into_response(self) -> Response {
         match self {
-            PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublishError::UnexpectedError(ref err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(PublishNewsletterResponse {
+                    success: false,
+                    error: Some(format!("Unexpected error: {:#}", err)),
+                    message: None,
+                }),
+            )
+                .into_response(),
             PublishError::AuthError(_) => {
                 let mut headers = axum::http::HeaderMap::new();
                 let header_value = HeaderValue::from_static(r#"Basic realm="publish""#);
                 headers.insert(header::WWW_AUTHENTICATE, header_value);
-                (StatusCode::UNAUTHORIZED, headers).into_response()
+                (
+                    StatusCode::UNAUTHORIZED,
+                    headers,
+                    Json(PublishNewsletterResponse {
+                        success: false,
+                        error: Some("Authentication failed".to_string()),
+                        message: None,
+                    }),
+                )
+                    .into_response()
             }
         }
     }
