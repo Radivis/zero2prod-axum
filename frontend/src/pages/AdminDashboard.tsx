@@ -99,6 +99,11 @@ function AdminDashboard() {
         </Typography>
         <List>
           <ListItem disablePadding>
+            <ListItemButton component={Link} to="/admin/blog" aria-label="Manage blog">
+              Manage blog
+            </ListItemButton>
+          </ListItem>
+          <ListItem disablePadding>
             <ListItemButton component={Link} to="/admin/password" aria-label="Change password">
               Change password
             </ListItemButton>

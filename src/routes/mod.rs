@@ -1,4 +1,5 @@
-mod admin;
+pub mod admin;
+pub mod blog;
 pub mod constants;
 mod health_check;
 mod initial_password;
@@ -8,6 +9,7 @@ mod subscriptions_confirm;
 mod users;
 
 pub use admin::*;
+pub use blog::*;
 pub use health_check::*;
 pub use initial_password::*;
 pub use login::*;

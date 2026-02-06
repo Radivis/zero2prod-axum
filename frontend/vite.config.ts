@@ -49,8 +49,14 @@ export default defineConfig({
       '/admin': {
         target: backendUrl,
         changeOrigin: true,
-        // Only proxy POST requests, let Vite serve GET (React app)
+        // Proxy API routes (newsletters, password, logout, blog/posts), bypass page routes
         bypass(req) {
+          // Always proxy these admin API endpoints regardless of method
+          const apiPaths = ['/admin/newsletters', '/admin/password', '/admin/logout', '/admin/blog/'];
+          if (apiPaths.some(path => req.url?.startsWith(path))) {
+            return null; // Proxy to backend
+          }
+          // For other admin routes (like /admin/dashboard), serve React app for GET
           if (req.method === 'GET') {
             return '/index.html';
           }

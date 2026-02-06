@@ -1,5 +1,7 @@
 import { ReactNode } from 'react'
-import { Box } from '@mui/material'
+import { Box, AppBar, Toolbar, Typography, Button } from '@mui/material'
+import { Link as RouterLink } from 'react-router-dom'
+import ThemeToggle from './ThemeToggle'
 
 interface LayoutProps {
   children: ReactNode
@@ -13,6 +15,19 @@ function Layout({ children }: LayoutProps) {
         backgroundColor: 'background.default',
       }}
     >
+      <AppBar position="static">
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            <Button color="inherit" component={RouterLink} to="/">
+              Home
+            </Button>
+            <Button color="inherit" component={RouterLink} to="/blog">
+              Blog
+            </Button>
+          </Typography>
+          <ThemeToggle />
+        </Toolbar>
+      </AppBar>
       {children}
     </Box>
   )

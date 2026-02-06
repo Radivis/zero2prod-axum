@@ -11,6 +11,11 @@ use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
 use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
+use crate::routes::admin::{
+    admin_create_post, admin_delete_post, admin_get_all_posts, admin_get_post_by_id,
+    admin_update_post,
+};
+use crate::routes::blog::{get_post_by_id, get_published_posts};
 use crate::routes::constants::ERROR_AUTHENTICATION_REQUIRED;
 use crate::routes::{
     auth_check_endpoint, change_password, check_users_exist_endpoint, confirm,
@@ -109,6 +114,8 @@ impl Application {
             .route("/health_check", get(health_check))
             .route("/api/users/exists", get(check_users_exist_endpoint))
             .route("/api/auth/me", get(auth_check_endpoint))
+            .route("/api/blog/posts", get(get_published_posts))
+            .route("/api/blog/posts/{id}", get(get_post_by_id))
             .route("/login", post(login))
             .route("/initial_password", post(create_initial_password))
             .route("/subscriptions", post(subscribe))
@@ -119,6 +126,11 @@ impl Application {
                     .route("/newsletters", post(publish_newsletter))
                     .route("/password", post(change_password))
                     .route("/logout", post(log_out))
+                    .route("/blog/posts", get(admin_get_all_posts))
+                    .route("/blog/posts/{id}", get(admin_get_post_by_id))
+                    .route("/blog/posts", post(admin_create_post))
+                    .route("/blog/posts/{id}", axum::routing::put(admin_update_post))
+                    .route("/blog/posts/{id}", axum::routing::delete(admin_delete_post))
                     .route_layer(axum::middleware::from_fn(require_auth)),
             )
             .with_state(app_state)
