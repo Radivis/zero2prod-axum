@@ -173,3 +173,30 @@ where
     }
     f().await.expect("Retry exhausted")
 }
+
+/// Helper function to create a blog post in the database for testing
+pub async fn create_blog_post(
+    pool: &PgPool,
+    title: &str,
+    content: &str,
+    status: &str,
+    author_id: uuid::Uuid,
+) -> uuid::Uuid {
+    let post_id = uuid::Uuid::new_v4();
+    sqlx::query!(
+        r#"
+        INSERT INTO blog_posts (id, title, content, status, author_id)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+        post_id,
+        title,
+        content,
+        status,
+        author_id
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to create test blog post");
+
+    post_id
+}
