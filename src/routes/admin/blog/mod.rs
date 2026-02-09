@@ -15,6 +15,12 @@ pub struct MessageResponse {
     pub message: String,
 }
 
+#[derive(Serialize)]
+pub struct DeletePostResponse {
+    pub is_deleted: bool,
+    pub title: String,
+}
+
 #[tracing::instrument(name = "Admin: Get all blog posts", skip(state))]
 pub async fn admin_get_all_posts(
     State(state): State<AppState>,
@@ -82,9 +88,15 @@ pub async fn admin_update_post(
         &update_post.status,
     )
     .await
-    .map_err(|e| {
-        tracing::error!("Failed to update post {}: {:?}", post_id, e);
-        StatusCode::INTERNAL_SERVER_ERROR
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => {
+            tracing::error!("Post {} not found", post_id);
+            StatusCode::NOT_FOUND
+        }
+        _ => {
+            tracing::error!("Failed to update post {}: {:?}", post_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     })?;
 
     Ok(Json(post.into()))
@@ -95,15 +107,16 @@ pub async fn admin_delete_post(
     State(state): State<AppState>,
     Path(post_id): Path<Uuid>,
     Extension(_user_id): Extension<UserId>,
-) -> Result<Json<MessageResponse>, StatusCode> {
-    queries::delete_post(&state.db, post_id)
+) -> Result<Json<DeletePostResponse>, StatusCode> {
+    let result = queries::delete_post(&state.db, post_id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete post {}: {:?}", post_id, e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    Ok(Json(MessageResponse {
-        message: "Post deleted successfully".to_string(),
+    Ok(Json(DeletePostResponse {
+        is_deleted: result.is_deleted,
+        title: result.title,
     }))
 }

@@ -220,9 +220,38 @@ pub async fn update_post(
     })
 }
 
+pub struct DeletePostResult {
+    pub is_deleted: bool,
+    pub title: String,
+}
+
 #[tracing::instrument(name = "Delete blog post from database", skip(pool))]
-pub async fn delete_post(pool: &PgPool, post_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+pub async fn delete_post(pool: &PgPool, post_id: Uuid) -> Result<DeletePostResult, sqlx::Error> {
+    // First, try to get the post title
+    let post_title = sqlx::query!(
+        r#"
+        SELECT title
+        FROM blog_posts
+        WHERE id = $1
+        "#,
+        post_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    // If post doesn't exist, return early
+    let title = match post_title {
+        Some(record) => record.title,
+        None => {
+            return Ok(DeletePostResult {
+                is_deleted: false,
+                title: String::new(),
+            });
+        }
+    };
+
+    // Post exists, attempt to delete it
+    let result = sqlx::query!(
         r#"
         DELETE FROM blog_posts
         WHERE id = $1
@@ -232,5 +261,8 @@ pub async fn delete_post(pool: &PgPool, post_id: Uuid) -> Result<(), sqlx::Error
     .execute(pool)
     .await?;
 
-    Ok(())
+    Ok(DeletePostResult {
+        is_deleted: result.rows_affected() > 0,
+        title,
+    })
 }

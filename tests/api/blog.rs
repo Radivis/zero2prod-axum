@@ -353,7 +353,7 @@ async fn admin_get_post_by_id_returns_404_for_nonexistent_post() {
 }
 
 #[tokio::test]
-async fn admin_update_post_returns_500_for_nonexistent_post() {
+async fn admin_update_post_returns_404_for_nonexistent_post() {
     // Arrange
     let container = spawn_app_container_with_user(function_name!())
         .await
@@ -372,12 +372,11 @@ async fn admin_update_post_returns_500_for_nonexistent_post() {
         .admin_update_post(nonexistent_post_id, &body)
         .await;
 
-    // Assert - Currently returns 500 (implementation maps RowNotFound to INTERNAL_SERVER_ERROR)
-    // TODO: Ideally this should return 404 by checking for RowNotFound error
+    // Assert
     assert_eq!(
         response.status().as_u16(),
-        500,
-        "The API did not return 500 when updating a nonexistent post"
+        404,
+        "The API did not return 404 when updating a nonexistent post"
     );
 }
 
@@ -393,11 +392,22 @@ async fn admin_delete_nonexistent_post_returns_200() {
     // Act
     let response = container.app.admin_delete_post(nonexistent_post_id).await;
 
-    // Assert - DELETE succeeds even when no rows are affected (standard SQL behavior)
+    // Assert - DELETE succeeds with 200, but is_deleted is false
     assert_eq!(
         response.status().as_u16(),
         200,
         "The API did not return 200 when deleting a nonexistent post"
+    );
+
+    let body: serde_json::Value = assert_json_response(response).await;
+    assert!(
+        !body["is_deleted"].as_bool().unwrap(),
+        "is_deleted should be false when post doesn't exist"
+    );
+    assert_eq!(
+        body["title"].as_str().unwrap(),
+        "",
+        "title should be empty when post doesn't exist"
     );
 }
 
@@ -824,7 +834,15 @@ async fn admin_delete_post_returns_200() {
     // Assert
     assert_eq!(response.status().as_u16(), 200);
     let body: serde_json::Value = assert_json_response(response).await;
-    assert!(body["message"].as_str().is_some());
+    assert!(
+        body["is_deleted"].as_bool().unwrap(),
+        "is_deleted should be true when post was successfully deleted"
+    );
+    assert_eq!(
+        body["title"].as_str().unwrap(),
+        "Post to Delete",
+        "title should match the deleted post's title"
+    );
 
     // Verify post is actually deleted
     let get_response = container.app.admin_get_post_by_id(post_id).await;
