@@ -87,7 +87,7 @@ export async function makeUser(
 ): Promise<MakeUserResult> {
   return retryUserCreation(async () => {
     try {
-      const response = await fetch(`${backendAddress}/initial_password`, {
+      const response = await fetch(`${backendAddress}/api/initial_password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -7,6 +7,7 @@ use std::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
+use utoipa::OpenApi;
 
 use crate::authentication::UserId;
 use crate::configuration::{DatabaseSettings, Settings};
@@ -110,16 +111,43 @@ impl Application {
                 tower_sessions::cookie::time::Duration::hours(1),
             ));
 
-        let app = Router::new()
-            .route("/health_check", get(health_check))
-            .route("/api/users/exists", get(check_users_exist_endpoint))
-            .route("/api/auth/me", get(auth_check_endpoint))
-            .route("/api/blog/posts", get(get_published_posts))
-            .route("/api/blog/posts/{id}", get(get_post_by_id))
+        // Define OpenAPI specification
+        #[derive(OpenApi)]
+        #[openapi(
+            info(
+                title = "Zero2Prod API",
+                version = "1.0.0",
+                description = "Newsletter subscription and blog management API"
+            ),
+            paths(
+                // Auth & users - only include routes with annotations
+                crate::routes::login::post::login,
+                crate::routes::initial_password::post::create_initial_password,
+                crate::routes::users::auth_check::auth_check_endpoint,
+                crate::routes::users::check_exists::check_users_exist_endpoint,
+                crate::routes::health_check::health_check,
+            ),
+            tags(
+                (name = "authentication", description = "Authentication and user management endpoints"),
+                (name = "health", description = "Health check endpoint"),
+            )
+        )]
+        struct ApiDoc;
+
+        // Build API router first
+        let api_router = Router::new()
+            // Auth & users (no auth required)
+            .route("/users/exists", get(check_users_exist_endpoint))
+            .route("/auth/me", get(auth_check_endpoint))
             .route("/login", post(login))
             .route("/initial_password", post(create_initial_password))
+            // Subscriptions (no auth required)
             .route("/subscriptions", post(subscribe))
             .route("/subscriptions/confirm", get(confirm))
+            // Blog - public endpoints (no auth required)
+            .route("/blog/posts", get(get_published_posts))
+            .route("/blog/posts/{id}", get(get_post_by_id))
+            // Admin endpoints (auth required)
             .nest(
                 "/admin",
                 Router::new()
@@ -132,7 +160,20 @@ impl Application {
                     .route("/blog/posts/{id}", axum::routing::put(admin_update_post))
                     .route("/blog/posts/{id}", axum::routing::delete(admin_delete_post))
                     .route_layer(axum::middleware::from_fn(require_auth)),
+            );
+
+        // Combine all routes
+        let app = Router::new()
+            .route("/health_check", get(health_check))
+            // Legacy subscription confirmation route (for email links - backwards compatible)
+            .route("/subscriptions/confirm", get(confirm))
+            // Serve OpenAPI spec as JSON at /api/openapi.json
+            .route(
+                "/api/openapi.json",
+                get(|| async { axum::Json(ApiDoc::openapi()) }),
             )
+            // Nest API routes
+            .nest("/api", api_router)
             .with_state(app_state)
             .layer(session_layer)
             .layer(TraceLayer::new_for_http());

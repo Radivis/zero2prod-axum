@@ -9,10 +9,12 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use secrecy::{ExposeSecret, Secret};
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::ToSchema)]
 pub struct InitialPasswordFormData {
     username: String,
+    #[schema(value_type = String)]
     password: Secret<String>,
+    #[schema(value_type = String)]
     password_confirmation: Secret<String>,
 }
 
@@ -70,6 +72,19 @@ impl IntoResponse for InitialPasswordError {
     }
 }
 
+/// Create initial admin password
+///
+/// Creates the first admin user when no users exist
+#[utoipa::path(
+    post,
+    path = "/api/initial_password",
+    tag = "authentication",
+    request_body = InitialPasswordFormData,
+    responses(
+        (status = 201, description = "Admin user created successfully"),
+        (status = 400, description = "Validation error or users already exist")
+    )
+)]
 #[tracing::instrument(skip(form, state))]
 pub async fn create_initial_password(
     State(state): State<AppState>,

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Box,
   Typography,
@@ -22,6 +22,7 @@ import SimpleMDE from 'react-simplemde-editor'
 import 'easymde/dist/easymde.min.css'
 import { fetchAdminPost, createPost, updatePost, NewBlogPost, UpdateBlogPost } from '../api/blog'
 import { useTheme } from '../contexts/ThemeContext'
+import type EasyMDE from 'easymde'
 
 function AdminBlogEdit() {
   const { id } = useParams<{ id: string }>()
@@ -34,6 +35,8 @@ function AdminBlogEdit() {
   const [content, setContent] = useState('')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>(currentTheme)
+  const [isPreviewActive, setIsPreviewActive] = useState(false)
+  const editorRef = useRef<EasyMDE | null>(null)
 
   const { data: post, isLoading, error } = useQuery({
     queryKey: ['admin-blog-post', id],
@@ -91,6 +94,21 @@ function AdminBlogEdit() {
     navigate('/admin/blog')
   }
 
+  // Monitor preview state changes
+  useEffect(() => {
+    const checkPreviewState = () => {
+      if (editorRef.current) {
+        const previewElement = editorRef.current.codemirror.getWrapperElement().parentElement?.querySelector('.editor-preview-active, .editor-preview-active-side')
+        setIsPreviewActive(!!previewElement)
+      }
+    }
+
+    // Check periodically (SimpleMDE doesn't have direct mode change events)
+    const interval = setInterval(checkPreviewState, 200)
+    
+    return () => clearInterval(interval)
+  }, [])
+
   const editorOptions = useMemo(
     () => ({
       spellChecker: false,
@@ -117,6 +135,10 @@ function AdminBlogEdit() {
     }),
     []
   )
+
+  const getMdeInstance = (instance: EasyMDE) => {
+    editorRef.current = instance
+  }
 
   if (isEditMode && isLoading) {
     return (
@@ -181,26 +203,28 @@ function AdminBlogEdit() {
               <Typography variant="subtitle2">
                 Content (Markdown)
               </Typography>
-              <Tooltip title="Preview Theme (for side-by-side and preview modes)">
-                <ToggleButtonGroup
-                  value={previewTheme}
-                  exclusive
-                  onChange={(_, newTheme) => {
-                    if (newTheme !== null) {
-                      setPreviewTheme(newTheme)
-                    }
-                  }}
-                  size="small"
-                  aria-label="preview theme"
-                >
-                  <ToggleButton value="light" aria-label="light preview">
-                    <LightMode fontSize="small" />
-                  </ToggleButton>
-                  <ToggleButton value="dark" aria-label="dark preview">
-                    <DarkMode fontSize="small" />
-                  </ToggleButton>
-                </ToggleButtonGroup>
-              </Tooltip>
+              {isPreviewActive && (
+                <Tooltip title="Preview Theme (toggle to see how your post looks in light/dark mode)">
+                  <ToggleButtonGroup
+                    value={previewTheme}
+                    exclusive
+                    onChange={(_, newTheme) => {
+                      if (newTheme !== null) {
+                        setPreviewTheme(newTheme)
+                      }
+                    }}
+                    size="small"
+                    aria-label="preview theme"
+                  >
+                    <ToggleButton value="light" aria-label="light preview">
+                      <LightMode fontSize="small" />
+                    </ToggleButton>
+                    <ToggleButton value="dark" aria-label="dark preview">
+                      <DarkMode fontSize="small" />
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Tooltip>
+              )}
             </Box>
             <Box
               className={`editor-wrapper ${currentTheme === 'dark' ? 'dark-editor' : ''} ${previewTheme === 'dark' ? 'dark-preview' : ''}`}
@@ -261,6 +285,7 @@ function AdminBlogEdit() {
                 value={content}
                 onChange={setContent}
                 options={editorOptions}
+                getMdeInstance={getMdeInstance}
               />
             </Box>
           </Box>

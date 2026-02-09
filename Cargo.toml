@@ -34,6 +34,8 @@ tracing-log = "0.2"
 unicode-segmentation = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 validator = "0.20"
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
 
 # Dependencies needed for E2E test binary
 wiremock = { version = "0.6", optional = true }

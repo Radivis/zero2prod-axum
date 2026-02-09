@@ -24,7 +24,7 @@ function AdminPassword() {
       new_password: string
       new_password_check: string
     }) => {
-      return apiRequest('/admin/password', {
+      return apiRequest('/api/admin/password', {
         method: 'POST',
         body: JSON.stringify(data),
       })

@@ -7,12 +7,21 @@ use axum::response::{IntoResponse, Json};
 use serde::Serialize;
 use tower_sessions::Session;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct AuthCheckResponse {
     authenticated: bool,
     username: Option<String>,
 }
 
+/// Check authentication status
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    tag = "authentication",
+    responses(
+        (status = 200, description = "Authentication status", body = AuthCheckResponse)
+    )
+)]
 pub async fn auth_check_endpoint(
     session: Session,
     State(state): State<AppState>,

@@ -50,7 +50,7 @@ function AdminDashboard() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('/admin/logout', {
+      return apiRequest('/api/admin/logout', {
         method: 'POST',
       })
     },

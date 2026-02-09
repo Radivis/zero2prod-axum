@@ -41,33 +41,33 @@ export async function fetchPost(id: string): Promise<BlogPost> {
 
 // Admin API functions
 export async function fetchAdminPosts(): Promise<BlogPost[]> {
-  return apiRequest<BlogPost[]>('/admin/blog/posts', {
+  return apiRequest<BlogPost[]>('/api/admin/blog/posts', {
     method: 'GET',
   })
 }
 
 export async function fetchAdminPost(id: string): Promise<BlogPost> {
-  return apiRequest<BlogPost>(`/admin/blog/posts/${id}`, {
+  return apiRequest<BlogPost>(`/api/admin/blog/posts/${id}`, {
     method: 'GET',
   })
 }
 
 export async function createPost(data: NewBlogPost): Promise<BlogPost> {
-  return apiRequest<BlogPost>('/admin/blog/posts', {
+  return apiRequest<BlogPost>('/api/admin/blog/posts', {
     method: 'POST',
     body: JSON.stringify(data),
   })
 }
 
 export async function updatePost(id: string, data: UpdateBlogPost): Promise<BlogPost> {
-  return apiRequest<BlogPost>(`/admin/blog/posts/${id}`, {
+  return apiRequest<BlogPost>(`/api/admin/blog/posts/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   })
 }
 
 export async function deletePost(id: string): Promise<DeleteResponse> {
-  return apiRequest<DeleteResponse>(`/admin/blog/posts/${id}`, {
+  return apiRequest<DeleteResponse>(`/api/admin/blog/posts/${id}`, {
     method: 'DELETE',
   })
 }

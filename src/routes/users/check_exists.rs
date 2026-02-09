@@ -3,11 +3,20 @@ use axum::Json;
 use axum::extract::State;
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct UsersExistResponse {
     pub users_exist: bool,
 }
 
+/// Check if any users exist
+#[utoipa::path(
+    get,
+    path = "/api/users/exists",
+    tag = "authentication",
+    responses(
+        (status = 200, description = "Users existence check", body = UsersExistResponse)
+    )
+)]
 pub async fn check_users_exist_endpoint(
     State(state): State<AppState>,
 ) -> Result<Json<UsersExistResponse>, axum::http::StatusCode> {

@@ -135,7 +135,7 @@ async fn you_must_be_logged_in_to_send_newsletters_form() {
     // Act - Try to access newsletter endpoint without auth
     let response = app
         .api_client
-        .post(format!("{}/admin/newsletters", &app.address))
+        .post(format!("{}/api/admin/newsletters", &app.address))
         .json(&serde_json::json!({
             "title": "Test-Title",
             "html_content": "<i>This is content!</i>",

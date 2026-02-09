@@ -7,7 +7,7 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
     // Arrange
     let app = spawn_app(function_name!()).await;
     // Act
-    let response = reqwest::get(&format!("{}/subscriptions/confirm", app.address))
+    let response = reqwest::get(&format!("{}/api/subscriptions/confirm", app.address))
         .await
         .unwrap();
     // Assert

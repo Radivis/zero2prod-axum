@@ -21,7 +21,7 @@ function InitialPassword() {
 
   const initialPasswordMutation = useMutation({
     mutationFn: async (data: { username: string; password: string; password_confirmation: string }) => {
-      return apiRequest('/initial_password', {
+      return apiRequest('/api/initial_password', {
         method: 'POST',
         body: JSON.stringify(data),
       })

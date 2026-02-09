@@ -9,7 +9,7 @@ async fn you_must_be_logged_in_to_access_the_admin_dashboard() {
     // Act - Try to access a protected admin endpoint (newsletters requires auth)
     let response = app
         .api_client
-        .post(format!("{}/admin/newsletters", &app.address))
+        .post(format!("{}/api/admin/newsletters", &app.address))
         .json(&serde_json::json!({
             "title": "Test",
             "html_content": "<p>Test</p>",
@@ -65,7 +65,7 @@ async fn logout_clears_session_state() {
     let response = container
         .app
         .api_client
-        .post(format!("{}/admin/newsletters", &container.app.address))
+        .post(format!("{}/api/admin/newsletters", &container.app.address))
         .json(&serde_json::json!({
             "title": "Test",
             "html_content": "<p>Test</p>",
