@@ -201,15 +201,26 @@ The frontend will automatically pick up the changes!
 
 3. Check browser console for errors (CORS, network issues)
 
-### Styling issues
+### Dark Mode Support
 
-The Swagger UI CSS might conflict with MUI. Wrap it in a Paper component with its own scope:
+The Swagger UI automatically syncs with MUI's theme! See `doc/SWAGGER_UI_DARK_MODE.md` for details.
+
+Key features:
+- ✅ Detects MUI theme mode (light/dark)
+- ✅ Applies comprehensive CSS overrides for proper contrast
+- ✅ All text, backgrounds, and borders adapt to theme
+- ✅ Persists with theme toggle
+
+The implementation uses MUI's `useTheme()` hook and conditional styling:
 
 ```typescript
+const theme = useTheme();
+const isDark = theme.palette.mode === 'dark';
+
 <Paper sx={{ 
-  p: 2,
   '& .swagger-ui': {
-    // Custom overrides here
+    color: isDark ? theme.palette.text.primary : undefined,
+    // ... more overrides
   }
 }}>
   <SwaggerUI ... />

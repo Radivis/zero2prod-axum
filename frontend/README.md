@@ -181,3 +181,5 @@ The production build is optimized and ready to deploy to any static hosting serv
 ## Dark Mode
 
 The app includes a built-in dark mode toggle available in the top-right corner of the navigation bar. The theme preference is persisted in localStorage.
+
+**Swagger UI Integration**: The API documentation at `/docs` automatically syncs with the MUI theme. All Swagger UI components (endpoints, parameters, responses, code examples) are styled to match the current theme with proper contrast and readability. See `doc/SWAGGER_UI_DARK_MODE.md` for implementation details.

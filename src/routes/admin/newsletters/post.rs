@@ -12,11 +12,15 @@ use crate::domain::SubscriberEmailAddress;
 use crate::idempotency::{IdempotencyKey, NextAction, save_response, try_processing};
 use crate::telemetry::error_chain_fmt;
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 pub struct SendNewsletterFormData {
+    /// Newsletter title
     title: String,
+    /// HTML content of the newsletter
     html_content: String,
+    /// Plain text content of the newsletter
     text_content: String,
+    /// Idempotency key to prevent duplicate submissions
     idempotency_key: String,
 }
 
@@ -25,11 +29,14 @@ struct ConfirmedSubscriber {
     email: SubscriberEmailAddress,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct PublishNewsletterResponse {
+    /// Indicates if newsletter was published successfully
     success: bool,
+    /// Error message if publishing failed
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Success message
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
@@ -121,6 +128,22 @@ async fn enqueue_delivery_tasks(
 }
 
 // Axum version
+/// Publish newsletter to confirmed subscribers
+///
+/// Sends a newsletter to all confirmed subscribers. Requires authentication.
+/// Uses idempotency keys to prevent duplicate sends.
+#[utoipa::path(
+    post,
+    path = "/api/admin/newsletters",
+    tag = "admin",
+    request_body = SendNewsletterFormData,
+    responses(
+        (status = 200, description = "Newsletter published successfully", body = PublishNewsletterResponse),
+        (status = 400, description = "Invalid form data"),
+        (status = 401, description = "Not authenticated"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 #[tracing::instrument(
     name = "Publish Newsletter",
     skip(form, state, user_id)

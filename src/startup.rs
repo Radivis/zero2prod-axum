@@ -120,16 +120,37 @@ impl Application {
                 description = "Newsletter subscription and blog management API"
             ),
             paths(
-                // Auth & users - only include routes with annotations
+                // Health check
+                crate::routes::health_check::health_check,
+                // Authentication & users
                 crate::routes::login::post::login,
                 crate::routes::initial_password::post::create_initial_password,
                 crate::routes::users::auth_check::auth_check_endpoint,
                 crate::routes::users::check_exists::check_users_exist_endpoint,
-                crate::routes::health_check::health_check,
+                // Subscriptions
+                crate::routes::subscribe,
+                crate::routes::confirm,
+                // Public blog
+                crate::routes::blog::get_published_posts,
+                crate::routes::blog::get_post_by_id,
+                // Admin endpoints
+                crate::routes::admin::logout::log_out,
+                crate::routes::admin::password::post::change_password,
+                crate::routes::admin::newsletters::post::publish_newsletter,
+                // Admin blog
+                crate::routes::admin::blog::admin_get_all_posts,
+                crate::routes::admin::blog::admin_get_post_by_id,
+                crate::routes::admin::blog::admin_create_post,
+                crate::routes::admin::blog::admin_update_post,
+                crate::routes::admin::blog::admin_delete_post,
             ),
             tags(
-                (name = "authentication", description = "Authentication and user management endpoints"),
                 (name = "health", description = "Health check endpoint"),
+                (name = "authentication", description = "Authentication and user management"),
+                (name = "subscriptions", description = "Newsletter subscription management"),
+                (name = "blog", description = "Public blog endpoints"),
+                (name = "admin", description = "Admin endpoints (authentication required)"),
+                (name = "admin-blog", description = "Admin blog management (authentication required)"),
             )
         )]
         struct ApiDoc;

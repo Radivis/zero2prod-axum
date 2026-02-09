@@ -8,14 +8,21 @@ use axum::response::Json;
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct BlogPostResponse {
+    /// Unique identifier for the blog post
     pub id: Uuid,
+    /// Post title
     pub title: String,
+    /// Post content (markdown or HTML)
     pub content: String,
+    /// Post status (draft or published)
     pub status: String,
+    /// Author's username
     pub author_username: String,
+    /// Creation timestamp (RFC3339 format)
     pub created_at: String,
+    /// Last update timestamp (RFC3339 format)
     pub updated_at: String,
 }
 
@@ -35,6 +42,19 @@ impl From<BlogPost> for BlogPostResponse {
     }
 }
 
+/// Get all published blog posts
+///
+/// Returns a list of all blog posts with "published" status.
+/// No authentication required.
+#[utoipa::path(
+    get,
+    path = "/api/blog/posts",
+    tag = "blog",
+    responses(
+        (status = 200, description = "List of published blog posts", body = Vec<BlogPostResponse>),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 #[tracing::instrument(name = "Get published blog posts", skip(state))]
 pub async fn get_published_posts(
     State(state): State<AppState>,
@@ -48,6 +68,23 @@ pub async fn get_published_posts(
     Ok(Json(response))
 }
 
+/// Get a single published blog post by ID
+///
+/// Returns a specific blog post if it exists and has "published" status.
+/// No authentication required.
+#[utoipa::path(
+    get,
+    path = "/api/blog/posts/{id}",
+    tag = "blog",
+    params(
+        ("id" = Uuid, Path, description = "Blog post unique identifier")
+    ),
+    responses(
+        (status = 200, description = "Blog post found", body = BlogPostResponse),
+        (status = 404, description = "Blog post not found or not published"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 #[tracing::instrument(name = "Get blog post by id", skip(state))]
 pub async fn get_post_by_id(
     State(state): State<AppState>,

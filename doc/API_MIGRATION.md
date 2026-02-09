@@ -42,12 +42,36 @@ OpenAPI specification is available at: **`/api/openapi.json`**
 
 The Swagger UI is rendered by the React frontend (via `swagger-ui-react`) and dynamically loads the OpenAPI spec from the backend. This provides an interactive interface to explore and test all API endpoints.
 
-Currently documented endpoints:
-- `/health_check` - Health check
-- `/api/login` - User login
-- `/api/initial_password` - Create initial admin password
-- `/api/auth/me` - Check authentication status
-- `/api/users/exists` - Check if any users exist
+Currently documented endpoints (19 total):
+
+**Health**
+- `GET /health_check` - Health check
+
+**Authentication**
+- `POST /api/login` - User login
+- `POST /api/initial_password` - Create initial admin password
+- `GET /api/auth/me` - Check authentication status
+- `GET /api/users/exists` - Check if users exist
+
+**Subscriptions**
+- `POST /api/subscriptions` - Subscribe to newsletter
+- `GET /api/subscriptions/confirm` - Confirm subscription
+
+**Blog (Public)**
+- `GET /api/blog/posts` - Get all published posts
+- `GET /api/blog/posts/{id}` - Get single published post
+
+**Admin**
+- `POST /api/admin/logout` - Logout
+- `POST /api/admin/password` - Change password
+- `POST /api/admin/newsletters` - Publish newsletter
+
+**Admin Blog**
+- `GET /api/admin/blog/posts` - Get all posts (any status)
+- `GET /api/admin/blog/posts/{id}` - Get single post
+- `POST /api/admin/blog/posts` - Create new post
+- `PUT /api/admin/blog/posts/{id}` - Update post
+- `DELETE /api/admin/blog/posts/{id}` - Delete post
 
 The "API Docs" link is available in the main navigation bar for easy access.
 

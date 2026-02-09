@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum BlogPostStatus {
@@ -39,16 +39,22 @@ pub struct BlogPost {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct NewBlogPost {
+    /// Blog post title
     pub title: String,
+    /// Blog post content (markdown or HTML)
     pub content: String,
+    /// Post status (draft or published)
     pub status: BlogPostStatus,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct UpdateBlogPost {
+    /// Blog post title
     pub title: String,
+    /// Blog post content (markdown or HTML)
     pub content: String,
+    /// Post status (draft or published)
     pub status: BlogPostStatus,
 }
