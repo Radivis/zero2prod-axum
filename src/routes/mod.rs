@@ -11,8 +11,9 @@ pub mod users; // Public for OpenAPI annotations
 pub use admin::*;
 pub use blog::*;
 pub use health_check::*;
-pub use initial_password::*;
-pub use login::*;
+// Re-export only handler functions to avoid ambiguous glob re-exports
+pub use initial_password::create_initial_password;
+pub use login::login;
 pub use subscriptions::*;
 pub use subscriptions_confirm::*;
 pub use users::*;

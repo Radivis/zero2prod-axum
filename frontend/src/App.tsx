@@ -10,6 +10,7 @@ import Blog from './pages/Blog'
 import BlogPost from './pages/BlogPost'
 import AdminBlogList from './pages/AdminBlogList'
 import AdminBlogEdit from './pages/AdminBlogEdit'
+import { ApiDocs } from './pages/ApiDocs'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -28,6 +29,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/initial_password" element={<InitialPassword />} />
+            <Route path="/docs" element={<ApiDocs />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:id" element={<BlogPost />} />
             <Route

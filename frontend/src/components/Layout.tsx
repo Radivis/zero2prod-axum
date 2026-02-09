@@ -24,6 +24,9 @@ function Layout({ children }: LayoutProps) {
             <Button color="inherit" component={RouterLink} to="/blog">
               Blog
             </Button>
+            <Button color="inherit" component={RouterLink} to="/docs">
+              API Docs
+            </Button>
           </Typography>
           <ThemeToggle />
         </Toolbar>

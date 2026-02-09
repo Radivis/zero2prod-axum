@@ -38,6 +38,10 @@ The subscription confirmation endpoint is available at both:
 
 OpenAPI specification is available at: **`/api/openapi.json`**
 
+**Interactive Swagger UI is available at: [`http://localhost:3000/docs`](http://localhost:3000/docs)**
+
+The Swagger UI is rendered by the React frontend (via `swagger-ui-react`) and dynamically loads the OpenAPI spec from the backend. This provides an interactive interface to explore and test all API endpoints.
+
 Currently documented endpoints:
 - `/health_check` - Health check
 - `/api/login` - User login
@@ -45,10 +49,7 @@ Currently documented endpoints:
 - `/api/auth/me` - Check authentication status
 - `/api/users/exists` - Check if any users exist
 
-To view the API documentation, visit https://editor.swagger.io/ and load the OpenAPI spec from your running server:
-```bash
-curl http://localhost:8000/api/openapi.json
-```
+The "API Docs" link is available in the main navigation bar for easy access.
 
 ### Frontend Updates
 
