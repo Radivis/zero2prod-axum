@@ -49,12 +49,17 @@ export default defineConfig({
       '/admin': {
         target: backendUrl,
         changeOrigin: true,
-        // Proxy API routes (newsletters, password, logout, blog/posts), bypass page routes
+        // Proxy API routes, but serve React app for GET requests to page routes
         bypass(req) {
-          // Always proxy these admin API endpoints regardless of method
-          const apiPaths = ['/admin/newsletters', '/admin/password', '/admin/logout', '/admin/blog/'];
-          if (apiPaths.some(path => req.url?.startsWith(path))) {
-            return null; // Proxy to backend
+          // Always proxy these API endpoints when using POST/PUT/DELETE
+          const apiEndpoints = ['/admin/newsletters', '/admin/password', '/admin/logout', '/admin/blog/'];
+          if (apiEndpoints.some(path => req.url?.startsWith(path))) {
+            // Proxy POST/PUT/DELETE requests (API calls)
+            if (req.method !== 'GET') {
+              return null; // Proxy to backend
+            }
+            // For GET requests, serve React app (navigating to the page)
+            return '/index.html';
           }
           // For other admin routes (like /admin/dashboard), serve React app for GET
           if (req.method === 'GET') {

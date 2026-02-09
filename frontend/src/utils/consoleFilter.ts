@@ -40,11 +40,24 @@ export function filterConsole(
     originalMethods.set(method, original)
 
     console[method] = (...args: any[]) => {
-      const message = args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ')
+      try {
+        const message = args.map(arg => {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg)
+            } catch {
+              // Handle circular references or other stringify errors
+              return String(arg)
+            }
+          }
+          return String(arg)
+        }).join(' ')
 
-      if (!shouldFilter(message)) {
+        if (!shouldFilter(message)) {
+          original.apply(console, args)
+        }
+      } catch (error) {
+        // If filtering fails for any reason, log anyway
         original.apply(console, args)
       }
     }
