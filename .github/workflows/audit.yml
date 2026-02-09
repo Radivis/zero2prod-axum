@@ -37,6 +37,6 @@ jobs:
       - name: Run Socket security scan
         run: |
           cd frontend
-          socket npm audit --strict
+          python -m socketsecurity npm audit --strict
         env:
           SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
