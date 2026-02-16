@@ -12,7 +12,7 @@ feature:
       - description: "Public blog posts"
       - path: /blog
       - file: frontend/src/pages/Blog.tsx
-      - should_have_visible_elements:
+      - visible_elements:
         - title:
           - "Blog"
         - At least one blog post, if one published blog post exists
@@ -22,7 +22,7 @@ feature:
       - description: "View a single blog post"
       - path: /blog/:id
       - file: frontend/src/pages/BlogPost.tsx
-      - should_have_visible_elements:
+      - visible_elements:
         - title:
           - Title of blog post
         - blog post content with markdown formatting, if present
@@ -34,7 +34,7 @@ feature:
       - file: frontend/src/pages/AdminBlogList.tsx
       - requirements:
         - Authentication: Admin
-      - should_have_visible_elements:
+      - visible_elements:
         - title: "Manage Blog Posts"
         - new button to create a new blog post
           - click_event:
@@ -64,7 +64,7 @@ feature:
       - file: frontend/src/pages/AdminBlogEdit.tsx
       - requirements:
         - Authentication: Admin
-      - should_have_visible_elements:
+      - visible_elements:
         - title:
           - "Create Blog Post" or "Edit Blog Post"
         - form fields:

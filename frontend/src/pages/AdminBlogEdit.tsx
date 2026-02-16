@@ -185,7 +185,7 @@ function AdminBlogEdit() {
             disabled={isSubmitting}
           />
 
-          <FormControl fullWidth margin="normal" required>
+          <FormControl fullWidth margin="normal" required data-testid="blog-status-select">
             <InputLabel>Status</InputLabel>
             <Select
               value={status}
