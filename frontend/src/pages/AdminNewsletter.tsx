@@ -25,7 +25,7 @@ function AdminNewsletter() {
       text_content: string
       idempotency_key: string
     }) => {
-      return apiRequest('/admin/newsletters', {
+      return apiRequest('/api/admin/newsletters', {
         method: 'POST',
         body: JSON.stringify(data),
       })

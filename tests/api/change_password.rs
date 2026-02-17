@@ -9,7 +9,7 @@ async fn you_must_be_logged_in_to_see_the_change_password_form() {
     // Act - Try to access change password endpoint without auth
     let response = app
         .api_client
-        .post(format!("{}/admin/password", &app.address))
+        .post(format!("{}/api/admin/password", &app.address))
         .json(&serde_json::json!({
             "current_password": "test",
             "new_password": "test",

@@ -11,10 +11,16 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use secrecy::{ExposeSecret, Secret};
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::ToSchema)]
 pub struct ChangePasswordFormData {
+    /// Current password for verification
+    #[schema(value_type = String)]
     current_password: Secret<String>,
+    /// New password to set
+    #[schema(value_type = String)]
     new_password: Secret<String>,
+    /// New password confirmation (must match new_password)
+    #[schema(value_type = String)]
     new_password_check: Secret<String>,
 }
 
@@ -38,9 +44,11 @@ impl std::fmt::Debug for ChangePasswordError {
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct ChangePasswordResponse {
+    /// Indicates if password change was successful
     success: bool,
+    /// Error message if password change failed
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
@@ -66,6 +74,22 @@ impl IntoResponse for ChangePasswordError {
     }
 }
 
+/// Change admin password
+///
+/// Changes the password for the currently authenticated admin user.
+/// Requires authentication and current password verification.
+#[utoipa::path(
+    post,
+    path = "/api/admin/password",
+    tag = "admin",
+    request_body = ChangePasswordFormData,
+    responses(
+        (status = 200, description = "Password changed successfully", body = ChangePasswordResponse),
+        (status = 400, description = "Invalid password format or mismatch", body = ChangePasswordResponse),
+        (status = 401, description = "Current password incorrect or not authenticated", body = ChangePasswordResponse),
+        (status = 500, description = "Internal server error", body = ChangePasswordResponse),
+    )
+)]
 pub async fn change_password(
     user_id: UserId,
     State(state): State<AppState>,

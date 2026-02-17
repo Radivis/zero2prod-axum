@@ -1,16 +1,19 @@
-mod admin;
+pub mod admin;
+pub mod blog;
 pub mod constants;
-mod health_check;
-mod initial_password;
-mod login;
+pub mod health_check; // Public for OpenAPI annotations
+pub mod initial_password; // Public for OpenAPI annotations
+pub mod login; // Public for OpenAPI annotations
 mod subscriptions;
 mod subscriptions_confirm;
-mod users;
+pub mod users; // Public for OpenAPI annotations
 
 pub use admin::*;
+pub use blog::*;
 pub use health_check::*;
-pub use initial_password::*;
-pub use login::*;
+// Re-export only handler functions to avoid ambiguous glob re-exports
+pub use initial_password::create_initial_password;
+pub use login::login;
 pub use subscriptions::*;
 pub use subscriptions_confirm::*;
 pub use users::*;

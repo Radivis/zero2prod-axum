@@ -41,6 +41,13 @@ export interface TestUser {
 }
 
 /**
+ * Build Cookie header string from Playwright cookie array.
+ */
+export function getCookieHeader(cookies: Array<{ name: string; value: string }>): string {
+  return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
  * Retry a user creation operation with exponential backoff
  * Handles transient failures due to database contention
  */
@@ -87,7 +94,7 @@ export async function makeUser(
 ): Promise<MakeUserResult> {
   return retryUserCreation(async () => {
     try {
-      const response = await fetch(`${backendAddress}/initial_password`, {
+      const response = await fetch(`${backendAddress}/api/initial_password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

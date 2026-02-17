@@ -10,10 +10,12 @@ use chrono::Utc;
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub struct FormData {
+    /// Subscriber's email address
     email: String,
+    /// Subscriber's name
     name: String,
 }
 
@@ -93,6 +95,21 @@ pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
     Ok(NewSubscriber { email, name })
 }
 
+/// Subscribe to the newsletter
+///
+/// Creates a new subscription request and sends a confirmation email.
+/// The subscription is not active until the user clicks the confirmation link in the email.
+#[utoipa::path(
+    post,
+    path = "/api/subscriptions",
+    tag = "subscriptions",
+    request_body = FormData,
+    responses(
+        (status = 200, description = "Subscription request received, confirmation email sent"),
+        (status = 400, description = "Invalid form data (invalid email or name format)"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 #[tracing::instrument(
     name = "Adding a new subscriber",
     skip(form, state),

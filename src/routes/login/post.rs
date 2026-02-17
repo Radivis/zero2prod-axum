@@ -9,19 +9,34 @@ use tower_sessions::Session;
 
 use crate::authentication::{AuthError, Credentials, validate_credentials};
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::ToSchema)]
 pub struct FormData {
     username: String,
+    #[schema(value_type = String)]
     password: Secret<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct LoginResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
+/// User login endpoint
+///
+/// Authenticates a user and creates a session
+#[utoipa::path(
+    post,
+    path = "/api/login",
+    tag = "authentication",
+    request_body = FormData,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Invalid credentials", body = LoginResponse),
+        (status = 500, description = "Internal server error", body = LoginResponse)
+    )
+)]
 #[tracing::instrument(
     skip(form, state, session),
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)

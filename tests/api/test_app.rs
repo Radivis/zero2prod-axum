@@ -99,7 +99,7 @@ impl TestApp {
 
     pub async fn post_logout(&self) -> reqwest::Response {
         self.api_client
-            .post(format!("{}/admin/logout", &self.address))
+            .post(format!("{}/api/admin/logout", &self.address))
             .send()
             .await
             .expect("Failed to execute request.")
@@ -110,7 +110,7 @@ impl TestApp {
         Body: serde::Serialize,
     {
         self.api_client
-            .post(format!("{}/admin/password", &self.address))
+            .post(format!("{}/api/admin/password", &self.address))
             .json(body)
             .send()
             .await
@@ -122,7 +122,7 @@ impl TestApp {
         Body: serde::Serialize,
     {
         self.api_client
-            .post(format!("{}/login", &self.address))
+            .post(format!("{}/api/login", &self.address))
             .json(body)
             .send()
             .await
@@ -134,7 +134,7 @@ impl TestApp {
         Body: serde::Serialize,
     {
         self.api_client
-            .post(format!("{}/initial_password", &self.address))
+            .post(format!("{}/api/initial_password", &self.address))
             .json(body)
             .send()
             .await
@@ -154,7 +154,7 @@ impl TestApp {
         Body: serde::Serialize,
     {
         self.api_client
-            .post(format!("{}/admin/newsletters", &self.address))
+            .post(format!("{}/api/admin/newsletters", &self.address))
             .json(body)
             .send()
             .await
@@ -166,8 +166,83 @@ impl TestApp {
         Body: serde::Serialize,
     {
         self.api_client
-            .post(format!("{}/subscriptions", &self.address))
+            .post(format!("{}/api/subscriptions", &self.address))
             .json(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    // Blog public endpoints
+    pub async fn get_published_posts(&self) -> reqwest::Response {
+        self.api_client
+            .get(format!("{}/api/blog/posts", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn get_post_by_id(&self, post_id: Uuid) -> reqwest::Response {
+        self.api_client
+            .get(format!("{}/api/blog/posts/{}", &self.address, post_id))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    // Blog admin endpoints
+    pub async fn admin_get_all_posts(&self) -> reqwest::Response {
+        self.api_client
+            .get(format!("{}/api/admin/blog/posts", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn admin_get_post_by_id(&self, post_id: Uuid) -> reqwest::Response {
+        self.api_client
+            .get(format!(
+                "{}/api/admin/blog/posts/{}",
+                &self.address, post_id
+            ))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn admin_create_post<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .post(format!("{}/api/admin/blog/posts", &self.address))
+            .json(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn admin_update_post<Body>(&self, post_id: Uuid, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .put(format!(
+                "{}/api/admin/blog/posts/{}",
+                &self.address, post_id
+            ))
+            .json(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn admin_delete_post(&self, post_id: Uuid) -> reqwest::Response {
+        self.api_client
+            .delete(format!(
+                "{}/api/admin/blog/posts/{}",
+                &self.address, post_id
+            ))
             .send()
             .await
             .expect("Failed to execute request.")

@@ -6,8 +6,14 @@ import InitialPassword from './pages/InitialPassword'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminNewsletter from './pages/AdminNewsletter'
 import AdminPassword from './pages/AdminPassword'
+import Blog from './pages/Blog'
+import BlogPost from './pages/BlogPost'
+import AdminBlogList from './pages/AdminBlogList'
+import AdminBlogEdit from './pages/AdminBlogEdit'
+import { ApiDocs } from './pages/ApiDocs'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
+import { ROUTES } from './constants/routes'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
@@ -24,6 +30,9 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/initial_password" element={<InitialPassword />} />
+            <Route path="/docs" element={<ApiDocs />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:id" element={<BlogPost />} />
             <Route
               path="/admin/dashboard"
               element={
@@ -45,6 +54,30 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminPassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path={ROUTES.adminBlog}
+              element={
+                <ProtectedRoute>
+                  <AdminBlogList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path={ROUTES.adminBlogNew}
+              element={
+                <ProtectedRoute>
+                  <AdminBlogEdit />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path={ROUTES.adminBlogEditPath}
+              element={
+                <ProtectedRoute>
+                  <AdminBlogEdit />
                 </ProtectedRoute>
               }
             />

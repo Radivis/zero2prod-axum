@@ -13,52 +13,26 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // Proxy API endpoints and POST requests to backend
-      // Use 127.0.0.1 instead of localhost to force IPv4
+      // Proxy all /api requests to backend
+      // All other routes are served by React Router (SPA)
       '/api': {
         target: backendUrl,
         changeOrigin: true,
       },
+      // Health check endpoint (not under /api)
       '/health_check': {
         target: backendUrl,
         changeOrigin: true,
-      },
-      '/login': {
-        target: backendUrl,
-        changeOrigin: true,
-        // Only proxy POST requests, let Vite serve GET (React app)
-        bypass(req) {
-          if (req.method === 'GET') {
-            return '/index.html';
-          }
-        },
-      },
-      '/initial_password': {
-        target: backendUrl,
-        changeOrigin: true,
-        bypass(req) {
-          if (req.method === 'GET') {
-            return '/index.html';
-          }
-        },
-      },
-      '/subscriptions': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
-      '/admin': {
-        target: backendUrl,
-        changeOrigin: true,
-        // Only proxy POST requests, let Vite serve GET (React app)
-        bypass(req) {
-          if (req.method === 'GET') {
-            return '/index.html';
-          }
-        },
       },
     },
   },
   build: {
     outDir: 'dist',
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test-utils/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 })

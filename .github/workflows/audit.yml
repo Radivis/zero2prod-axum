@@ -26,14 +26,12 @@ jobs:
     # 3. Add the token as a GitHub repository secret named SOCKET_SECURITY_API_KEY
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.10'
+          node-version: '20'
       - name: Install Socket CLI
-        run: |
-          python -m pip install --upgrade pip
-          pip install socketsecurity
+        run: npm install -g @socketsecurity/cli
       - name: Run Socket security scan
         run: |
           cd frontend

@@ -38,7 +38,7 @@ pub fn test_writer() -> NonBlocking {
     let filename = if test_name != "unlabeled_test" {
         format!("tests/logs/nextest/{}.log", test_name)
     } else {
-        format!("tests/logs/cargo_test/cargo_test.log")
+        "tests/logs/cargo_test/cargo_test.log".to_string()
     };
 
     let file_appender = tracing_appender::rolling::never(".", filename);

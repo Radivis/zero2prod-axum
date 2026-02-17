@@ -6,9 +6,10 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use uuid::Uuid;
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::IntoParams)]
 #[allow(unused)]
 pub struct Parameters {
+    /// Subscription confirmation token received via email
     subscription_token: String,
 }
 #[tracing::instrument(name = "Mark subscriber as confirmed", skip(subscriber_id, db))]
@@ -69,6 +70,21 @@ impl IntoResponse for ConfirmError {
     }
 }
 
+/// Confirm newsletter subscription
+///
+/// Activates a subscription using the token received via email.
+/// This endpoint is called when a user clicks the confirmation link in their email.
+#[utoipa::path(
+    get,
+    path = "/api/subscriptions/confirm",
+    tag = "subscriptions",
+    params(Parameters),
+    responses(
+        (status = 200, description = "Subscription confirmed successfully"),
+        (status = 401, description = "Invalid or expired subscription token"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 #[tracing::instrument(name = "Confirm a pending subscriber", skip(parameters, state))]
 pub async fn confirm(
     State(state): State<AppState>,

@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { AUTH_CHECK_QUERY_KEY } from '../hooks/useAuthCheck'
 import {
   Paper,
   Typography,
@@ -12,6 +13,7 @@ import {
   Alert,
 } from '@mui/material'
 import { apiRequest } from '../api/client'
+import { ROUTES } from '../constants/routes'
 
 interface AuthCheckResponse {
   authenticated: boolean
@@ -20,6 +22,7 @@ interface AuthCheckResponse {
 
 function AdminDashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard-auth'],
@@ -50,15 +53,17 @@ function AdminDashboard() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('/admin/logout', {
+      return apiRequest('/api/admin/logout', {
         method: 'POST',
       })
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTH_CHECK_QUERY_KEY })
       navigate('/login')
     },
     onError: () => {
       // Even if logout fails, redirect to login
+      queryClient.invalidateQueries({ queryKey: AUTH_CHECK_QUERY_KEY })
       console.warn('Logout request failed, but redirecting to login page anyway')
       navigate('/login')
     },
@@ -98,6 +103,11 @@ function AdminDashboard() {
           Available actions:
         </Typography>
         <List>
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to={ROUTES.adminBlog} aria-label="Manage blog">
+              Manage blog
+            </ListItemButton>
+          </ListItem>
           <ListItem disablePadding>
             <ListItemButton component={Link} to="/admin/password" aria-label="Change password">
               Change password
