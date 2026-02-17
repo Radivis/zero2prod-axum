@@ -1,6 +1,7 @@
 import { ReactNode } from 'react'
 import { Box, AppBar, Toolbar, Typography, Button } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
+import { useAuthCheck } from '../hooks/useAuthCheck'
 import ThemeToggle from './ThemeToggle'
 
 interface LayoutProps {
@@ -8,6 +9,8 @@ interface LayoutProps {
 }
 
 function Layout({ children }: LayoutProps) {
+  const { isAuthenticated } = useAuthCheck()
+
   return (
     <Box
       sx={{
@@ -24,9 +27,20 @@ function Layout({ children }: LayoutProps) {
             <Button color="inherit" component={RouterLink} to="/blog">
               Blog
             </Button>
-            <Button color="inherit" component={RouterLink} to="/docs">
-              API Docs
-            </Button>
+            {isAuthenticated ? (
+              <Button color="inherit" component={RouterLink} to="/admin/dashboard">
+                Dashboard
+              </Button>
+              ) : (
+              <Button color="inherit" component={RouterLink} to="/login">
+                Login
+              </Button>
+            )}
+            {isAuthenticated && (
+              <Button color="inherit" component={RouterLink} to="/docs">
+                API Docs
+              </Button>
+            )}
           </Typography>
           <ThemeToggle />
         </Toolbar>

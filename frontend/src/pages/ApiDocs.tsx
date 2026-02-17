@@ -2,6 +2,20 @@ import SwaggerUI from 'swagger-ui-react';
 import 'swagger-ui-react/swagger-ui.css';
 import { Box, Typography, Paper, useTheme } from '@mui/material';
 
+// HTTP method-specific colors for Swagger UI dark mode
+const SWAGGER_OPBLOCK_GET_BG = '#61affe'
+const SWAGGER_OPBLOCK_GET_RGBA_BG = 'rgba(97, 175, 254, 0.1)'
+const SWAGGER_OPBLOCK_GET_RGBA_BORDER = 'rgba(97, 175, 254, 0.3)'
+const SWAGGER_OPBLOCK_POST_BG = '#49cc90'
+const SWAGGER_OPBLOCK_POST_RGBA_BG = 'rgba(73, 204, 144, 0.1)'
+const SWAGGER_OPBLOCK_POST_RGBA_BORDER = 'rgba(73, 204, 144, 0.3)'
+const SWAGGER_OPBLOCK_PUT_BG = '#fca130'
+const SWAGGER_OPBLOCK_PUT_RGBA_BG = 'rgba(252, 161, 48, 0.1)'
+const SWAGGER_OPBLOCK_PUT_RGBA_BORDER = 'rgba(252, 161, 48, 0.3)'
+const SWAGGER_OPBLOCK_DELETE_BG = '#f93e3e'
+const SWAGGER_OPBLOCK_DELETE_RGBA_BG = 'rgba(249, 62, 62, 0.1)'
+const SWAGGER_OPBLOCK_DELETE_RGBA_BORDER = 'rgba(249, 62, 62, 0.3)'
+
 export function ApiDocs() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -51,31 +65,31 @@ export function ApiDocs() {
             },
             // HTTP method-specific colors for dark mode
             '& .opblock-get': {
-              backgroundColor: isDark ? 'rgba(97, 175, 254, 0.1)' : undefined,
-              borderColor: isDark ? 'rgba(97, 175, 254, 0.3)' : undefined,
+              backgroundColor: isDark ? SWAGGER_OPBLOCK_GET_RGBA_BG : undefined,
+              borderColor: isDark ? SWAGGER_OPBLOCK_GET_RGBA_BORDER : undefined,
               '& .opblock-summary-method': {
-                backgroundColor: isDark ? '#61affe' : undefined,
+                backgroundColor: isDark ? SWAGGER_OPBLOCK_GET_BG : undefined,
               },
             },
             '& .opblock-post': {
-              backgroundColor: isDark ? 'rgba(73, 204, 144, 0.1)' : undefined,
-              borderColor: isDark ? 'rgba(73, 204, 144, 0.3)' : undefined,
+              backgroundColor: isDark ? SWAGGER_OPBLOCK_POST_RGBA_BG : undefined,
+              borderColor: isDark ? SWAGGER_OPBLOCK_POST_RGBA_BORDER : undefined,
               '& .opblock-summary-method': {
-                backgroundColor: isDark ? '#49cc90' : undefined,
+                backgroundColor: isDark ? SWAGGER_OPBLOCK_POST_BG : undefined,
               },
             },
             '& .opblock-put': {
-              backgroundColor: isDark ? 'rgba(252, 161, 48, 0.1)' : undefined,
-              borderColor: isDark ? 'rgba(252, 161, 48, 0.3)' : undefined,
+              backgroundColor: isDark ? SWAGGER_OPBLOCK_PUT_RGBA_BG : undefined,
+              borderColor: isDark ? SWAGGER_OPBLOCK_PUT_RGBA_BORDER : undefined,
               '& .opblock-summary-method': {
-                backgroundColor: isDark ? '#fca130' : undefined,
+                backgroundColor: isDark ? SWAGGER_OPBLOCK_PUT_BG : undefined,
               },
             },
             '& .opblock-delete': {
-              backgroundColor: isDark ? 'rgba(249, 62, 62, 0.1)' : undefined,
-              borderColor: isDark ? 'rgba(249, 62, 62, 0.3)' : undefined,
+              backgroundColor: isDark ? SWAGGER_OPBLOCK_DELETE_RGBA_BG : undefined,
+              borderColor: isDark ? SWAGGER_OPBLOCK_DELETE_RGBA_BORDER : undefined,
               '& .opblock-summary-method': {
-                backgroundColor: isDark ? '#f93e3e' : undefined,
+                backgroundColor: isDark ? SWAGGER_OPBLOCK_DELETE_BG : undefined,
               },
             },
             '& .opblock-description-wrapper, & .opblock-body': {

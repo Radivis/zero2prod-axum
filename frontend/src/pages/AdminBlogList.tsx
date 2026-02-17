@@ -21,9 +21,14 @@ import {
   DialogContentText,
   DialogTitle,
 } from '@mui/material'
+import { LoadingState } from '../components/LoadingState'
+import { ErrorState } from '../components/ErrorState'
 import { Edit, Delete, Add } from '@mui/icons-material'
 import { useState } from 'react'
 import { fetchAdminPosts, deletePost } from '../api/blog'
+import { formatDate } from '../utils/dateFormat'
+import { ROUTES } from '../constants/routes'
+import { BLOG_QUERY_KEYS } from '../constants/queryKeys'
 
 function AdminBlogList() {
   const queryClient = useQueryClient()
@@ -31,14 +36,14 @@ function AdminBlogList() {
   const [postToDelete, setPostToDelete] = useState<{ id: string; title: string } | null>(null)
 
   const { data: posts, isLoading, error } = useQuery({
-    queryKey: ['admin-blog-posts'],
+    queryKey: BLOG_QUERY_KEYS.adminList,
     queryFn: fetchAdminPosts,
   })
 
   const deleteMutation = useMutation({
     mutationFn: deletePost,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-blog-posts'] })
+      queryClient.invalidateQueries({ queryKey: BLOG_QUERY_KEYS.adminList })
       setDeleteDialogOpen(false)
       setPostToDelete(null)
     },
@@ -60,30 +65,15 @@ function AdminBlogList() {
     setPostToDelete(null)
   }
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
-
   if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    )
+    return <LoadingState />
   }
 
   if (error) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <Alert severity="error">
-          {error instanceof Error ? error.message : 'Failed to load blog posts'}
-        </Alert>
-      </Box>
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load blog posts'}
+      />
     )
   }
 
@@ -97,7 +87,7 @@ function AdminBlogList() {
           variant="contained"
           startIcon={<Add />}
           component={RouterLink}
-          to="/admin/blog/new"
+          to={ROUTES.adminBlogNew}
           aria-label="Create new blog post"
         >
           New Post
@@ -133,13 +123,13 @@ function AdminBlogList() {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>{formatDate(post.created_at)}</TableCell>
-                  <TableCell>{formatDate(post.updated_at)}</TableCell>
+                  <TableCell>{formatDate(post.created_at, { month: 'short' })}</TableCell>
+                  <TableCell>{formatDate(post.updated_at, { month: 'short' })}</TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"
                       component={RouterLink}
-                      to={`/admin/blog/${post.id}/edit`}
+                      to={ROUTES.adminBlogEdit(post.id)}
                       aria-label={`Edit ${post.title}`}
                       color="primary"
                     >

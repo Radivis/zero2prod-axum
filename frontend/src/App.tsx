@@ -13,6 +13,7 @@ import AdminBlogEdit from './pages/AdminBlogEdit'
 import { ApiDocs } from './pages/ApiDocs'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
+import { ROUTES } from './constants/routes'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
@@ -57,7 +58,7 @@ function App() {
               }
             />
             <Route
-              path="/admin/blog"
+              path={ROUTES.adminBlog}
               element={
                 <ProtectedRoute>
                   <AdminBlogList />
@@ -65,7 +66,7 @@ function App() {
               }
             />
             <Route
-              path="/admin/blog/new"
+              path={ROUTES.adminBlogNew}
               element={
                 <ProtectedRoute>
                   <AdminBlogEdit />
@@ -73,7 +74,7 @@ function App() {
               }
             />
             <Route
-              path="/admin/blog/:id/edit"
+              path={ROUTES.adminBlogEditPath}
               element={
                 <ProtectedRoute>
                   <AdminBlogEdit />

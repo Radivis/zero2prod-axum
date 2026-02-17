@@ -31,6 +31,16 @@ const mockPosts: BlogPost[] = [
   },
 ]
 
+const manyPosts: BlogPost[] = Array.from({ length: 10 }, (_, i) => ({
+  id: `${i + 1}`,
+  title: `Post ${i + 1}`,
+  content: `Content ${i + 1}`,
+  status: 'published' as const,
+  author_username: 'testuser',
+  created_at: '2024-01-15T10:00:00Z',
+  updated_at: '2024-01-15T10:00:00Z',
+}))
+
 describe('Blog', () => {
   let observerCallback: IntersectionObserverCallback
   let observerInstance: {
@@ -153,17 +163,6 @@ describe('Blog', () => {
   })
 
   it('implements infinite scroll correctly', async () => {
-    // Create 10 posts
-    const manyPosts: BlogPost[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `${i + 1}`,
-      title: `Post ${i + 1}`,
-      content: `Content ${i + 1}`,
-      status: 'published' as const,
-      author_username: 'testuser',
-      created_at: '2024-01-15T10:00:00Z',
-      updated_at: '2024-01-15T10:00:00Z',
-    }))
-
     vi.mocked(blogApi.fetchPublishedPosts).mockResolvedValue(manyPosts)
 
     render(<Blog />)
@@ -180,17 +179,6 @@ describe('Blog', () => {
   })
 
   it('loads more posts when scrolling to bottom', async () => {
-    // Create 10 posts
-    const manyPosts: BlogPost[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `${i + 1}`,
-      title: `Post ${i + 1}`,
-      content: `Content ${i + 1}`,
-      status: 'published' as const,
-      author_username: 'testuser',
-      created_at: '2024-01-15T10:00:00Z',
-      updated_at: '2024-01-15T10:00:00Z',
-    }))
-
     vi.mocked(blogApi.fetchPublishedPosts).mockResolvedValue(manyPosts)
 
     render(<Blog />)
@@ -219,16 +207,6 @@ describe('Blog', () => {
   })
 
   it('shows loading indicator during pagination', async () => {
-    const manyPosts: BlogPost[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `${i + 1}`,
-      title: `Post ${i + 1}`,
-      content: `Content ${i + 1}`,
-      status: 'published' as const,
-      author_username: 'testuser',
-      created_at: '2024-01-15T10:00:00Z',
-      updated_at: '2024-01-15T10:00:00Z',
-    }))
-
     vi.mocked(blogApi.fetchPublishedPosts).mockResolvedValue(manyPosts)
 
     render(<Blog />)

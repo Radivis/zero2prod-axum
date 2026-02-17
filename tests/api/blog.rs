@@ -392,7 +392,7 @@ async fn admin_delete_nonexistent_post_returns_200() {
     // Act
     let response = container.app.admin_delete_post(nonexistent_post_id).await;
 
-    // Assert - DELETE succeeds with 200, but is_deleted is false
+    // Assert - DELETE succeeds with 200, but is_actual_deletion is false
     assert_eq!(
         response.status().as_u16(),
         200,
@@ -401,8 +401,8 @@ async fn admin_delete_nonexistent_post_returns_200() {
 
     let body: serde_json::Value = assert_json_response(response).await;
     assert!(
-        !body["is_deleted"].as_bool().unwrap(),
-        "is_deleted should be false when post doesn't exist"
+        !body["is_actual_deletion"].as_bool().unwrap(),
+        "is_actual_deletion should be false when post doesn't exist"
     );
     assert_eq!(
         body["title"].as_str().unwrap(),
@@ -835,8 +835,8 @@ async fn admin_delete_post_returns_200() {
     assert_eq!(response.status().as_u16(), 200);
     let body: serde_json::Value = assert_json_response(response).await;
     assert!(
-        body["is_deleted"].as_bool().unwrap(),
-        "is_deleted should be true when post was successfully deleted"
+        body["is_actual_deletion"].as_bool().unwrap(),
+        "is_actual_deletion should be true when post was successfully deleted"
     );
     assert_eq!(
         body["title"].as_str().unwrap(),

@@ -204,7 +204,7 @@ describe('AdminBlogList', () => {
   it('clicking "Cancel" in dialog closes it without deleting', async () => {
     const user = userEvent.setup()
     vi.mocked(blogApi.fetchAdminPosts).mockResolvedValue(mockPosts)
-    vi.mocked(blogApi.deletePost).mockResolvedValue({ message: 'Deleted' })
+    vi.mocked(blogApi.deletePost).mockResolvedValue({ is_actual_deletion: true, title: 'Test Post' })
 
     render(<AdminBlogList />)
 
@@ -235,7 +235,7 @@ describe('AdminBlogList', () => {
     const queryClient = createTestQueryClient()
     
     vi.mocked(blogApi.fetchAdminPosts).mockResolvedValue(mockPosts)
-    vi.mocked(blogApi.deletePost).mockResolvedValue({ message: 'Deleted' })
+    vi.mocked(blogApi.deletePost).mockResolvedValue({ is_actual_deletion: true, title: 'Test Post' })
 
     render(<AdminBlogList />, { queryClient })
 
@@ -265,7 +265,7 @@ describe('AdminBlogList', () => {
     const user = userEvent.setup()
     vi.mocked(blogApi.fetchAdminPosts).mockResolvedValue(mockPosts)
     vi.mocked(blogApi.deletePost).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ message: 'Deleted' }), 1000))
+      () => new Promise((resolve) => setTimeout(() => resolve({ is_actual_deletion: true, title: 'Published Post' }), 1000))
     )
 
     render(<AdminBlogList />)
@@ -301,7 +301,7 @@ describe('AdminBlogList', () => {
       .mockResolvedValueOnce(mockPosts)
       .mockResolvedValueOnce([mockPosts[1]])
     
-    vi.mocked(blogApi.deletePost).mockResolvedValue({ message: 'Deleted' })
+    vi.mocked(blogApi.deletePost).mockResolvedValue({ is_actual_deletion: true, title: 'Test Post' })
 
     render(<AdminBlogList />, { queryClient })
 

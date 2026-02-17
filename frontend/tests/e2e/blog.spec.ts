@@ -1,4 +1,4 @@
-import { test, expect, makeUser } from '../fixtures'
+import { test, expect, makeUser, getCookieHeader } from '../fixtures'
 
 test.describe('Blog - Public Pages', () => {
   test('public blog page displays published posts', async ({ page, backendApp, frontendServer, authenticatedPage }) => {
@@ -8,9 +8,7 @@ test.describe('Blog - Public Pages', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Cookie': await authenticatedPage.page.context().cookies().then(cookies => 
-            cookies.map(c => `${c.name}=${c.value}`).join('; ')
-          ),
+          'Cookie': getCookieHeader(await authenticatedPage.page.context().cookies()),
         },
         body: JSON.stringify({
           title,
@@ -50,9 +48,7 @@ test.describe('Blog - Public Pages', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Cookie': await authenticatedPage.page.context().cookies().then(cookies => 
-            cookies.map(c => `${c.name}=${c.value}`).join('; ')
-          ),
+          'Cookie': getCookieHeader(await authenticatedPage.page.context().cookies()),
         },
         body: JSON.stringify({
           title: `ScrollTest ${i}`,
@@ -86,9 +82,7 @@ test.describe('Blog - Public Pages', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': await authenticatedPage.page.context().cookies().then(cookies => 
-          cookies.map(c => `${c.name}=${c.value}`).join('; ')
-        ),
+        'Cookie': getCookieHeader(await authenticatedPage.page.context().cookies()),
       },
       body: JSON.stringify({
         title: 'Detail Test Post',
@@ -172,8 +166,7 @@ test.describe('Blog - Admin Management', () => {
     const { page } = authenticatedPage
 
     // Create a post via API
-    const cookies = await page.context().cookies()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const cookieHeader = getCookieHeader(await page.context().cookies())
 
     const createResponse = await fetch(`${backendApp.address}/api/admin/blog/posts`, {
       method: 'POST',
@@ -200,7 +193,7 @@ test.describe('Blog - Admin Management', () => {
     await page.getByLabel(`Edit Original Title`).click()
 
     // Verify navigation to edit page
-    await expect(page).toHaveURL(new RegExp(`/admin/blog/${post.id}/edit`))
+    await expect(page).toHaveURL(`/admin/blog/${post.id}/edit`)
     await expect(page.getByRole('heading', { name: 'Edit Blog Post', level: 1 })).toBeVisible()
 
     // Verify form is pre-filled
@@ -230,8 +223,7 @@ test.describe('Blog - Admin Management', () => {
     const { page } = authenticatedPage
 
     // Create 2 posts via API
-    const cookies = await page.context().cookies()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const cookieHeader = getCookieHeader(await page.context().cookies())
 
     for (let i = 1; i <= 2; i++) {
       const response = await fetch(`${backendApp.address}/api/admin/blog/posts`, {
@@ -278,8 +270,7 @@ test.describe('Blog - Admin Management', () => {
     const { page } = authenticatedPage
 
     // Create a post via API
-    const cookies = await page.context().cookies()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const cookieHeader = getCookieHeader(await page.context().cookies())
 
     const response = await fetch(`${backendApp.address}/api/admin/blog/posts`, {
       method: 'POST',
@@ -316,8 +307,7 @@ test.describe('Blog - Admin Management', () => {
 
   test('draft posts not visible on public page but visible in admin', async ({ page, authenticatedPage, backendApp, frontendServer }) => {
     // Create a draft post via API
-    const cookies = await authenticatedPage.page.context().cookies()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const cookieHeader = getCookieHeader(await authenticatedPage.page.context().cookies())
 
     const response = await fetch(`${backendApp.address}/api/admin/blog/posts`, {
       method: 'POST',
@@ -380,8 +370,9 @@ test.describe('Blog - Admin Management', () => {
     // Click light mode toggle
     await page.getByLabel('light preview').click()
 
-    // Verify light preview (dark-preview class should be removed or not active)
-    await page.waitForTimeout(100)
+    // Verify light preview (dark-preview class should be removed)
+    const lightClassNames = await editorWrapper.getAttribute('class')
+    expect(lightClassNames).not.toContain('dark-preview')
   })
 })
 
@@ -402,8 +393,7 @@ test.describe('Blog - Authorization', () => {
 
   test('public blog pages accessible without authentication', async ({ page, backendApp, frontendServer, authenticatedPage }) => {
     // Create a published post
-    const cookies = await authenticatedPage.page.context().cookies()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const cookieHeader = getCookieHeader(await authenticatedPage.page.context().cookies())
 
     const response = await fetch(`${backendApp.address}/api/admin/blog/posts`, {
       method: 'POST',

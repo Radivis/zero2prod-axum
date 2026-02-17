@@ -9,16 +9,19 @@ import {
   Divider,
   Paper,
 } from '@mui/material'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { LoadingState } from '../components/LoadingState'
+import { ErrorState } from '../components/ErrorState'
 import { fetchPublishedPosts } from '../api/blog'
+import { MarkdownContent } from '../components/MarkdownContent'
+import { BLOG_QUERY_KEYS } from '../constants/queryKeys'
 import type { BlogPost } from '../api/blog'
+import { formatDate } from '../utils/dateFormat'
 
 const POSTS_PER_PAGE = 5
 
 function Blog() {
   const { data: allPosts, isLoading, error } = useQuery({
-    queryKey: ['blog-posts'],
+    queryKey: BLOG_QUERY_KEYS.publishedList,
     queryFn: fetchPublishedPosts,
   })
 
@@ -75,30 +78,15 @@ function Blog() {
     }
   }, [loadMore, hasMore, isLoading])
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
-
   if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    )
+    return <LoadingState />
   }
 
   if (error) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <Alert severity="error">
-          {error instanceof Error ? error.message : 'Failed to load blog posts'}
-        </Alert>
-      </Box>
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load blog posts'}
+      />
     )
   }
 
@@ -139,74 +127,7 @@ function Blog() {
               />
             </Box>
 
-            <Box
-              sx={{
-                '& p': { mb: 2 },
-                '& h1': { mt: 3, mb: 2, fontSize: '2rem' },
-                '& h2': { mt: 3, mb: 2, fontSize: '1.75rem' },
-                '& h3': { mt: 2, mb: 1.5, fontSize: '1.5rem' },
-                '& h4': { mt: 2, mb: 1.5, fontSize: '1.25rem' },
-                '& ul, & ol': { mb: 2, pl: 3 },
-                '& li': { mb: 0.5 },
-                '& pre': {
-                  backgroundColor: 'action.hover',
-                  p: 2,
-                  borderRadius: 1,
-                  overflowX: 'auto',
-                },
-                '& code': {
-                  backgroundColor: 'action.hover',
-                  px: 0.5,
-                  py: 0.25,
-                  borderRadius: 0.5,
-                  fontFamily: 'monospace',
-                },
-                '& pre code': {
-                  backgroundColor: 'transparent',
-                  p: 0,
-                },
-                '& blockquote': {
-                  borderLeft: '4px solid',
-                  borderColor: 'primary.main',
-                  pl: 2,
-                  py: 0.5,
-                  my: 2,
-                  fontStyle: 'italic',
-                },
-                '& a': {
-                  color: 'primary.main',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                },
-                '& img': {
-                  maxWidth: '100%',
-                  height: 'auto',
-                  borderRadius: 1,
-                  my: 2,
-                },
-                '& table': {
-                  borderCollapse: 'collapse',
-                  width: '100%',
-                  my: 2,
-                },
-                '& th, & td': {
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  p: 1,
-                  textAlign: 'left',
-                },
-                '& th': {
-                  backgroundColor: 'action.hover',
-                  fontWeight: 'bold',
-                },
-              }}
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {post.content}
-              </ReactMarkdown>
-            </Box>
+            <MarkdownContent content={post.content} />
           </Paper>
 
           {index < displayedPosts.length - 1 && <Divider sx={{ my: 4 }} />}

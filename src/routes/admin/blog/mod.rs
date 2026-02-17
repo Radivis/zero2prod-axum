@@ -8,7 +8,21 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use serde::Serialize;
+use sqlx::Error as SqlxError;
 use uuid::Uuid;
+
+fn db_error_to_status(e: SqlxError, context: &str) -> StatusCode {
+    match &e {
+        SqlxError::RowNotFound => {
+            tracing::error!("{} not found", context);
+            StatusCode::NOT_FOUND
+        }
+        _ => {
+            tracing::error!("{}: {:?}", context, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct MessageResponse {
@@ -18,8 +32,8 @@ pub struct MessageResponse {
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct DeletePostResponse {
-    /// Whether the post was deleted
-    pub is_deleted: bool,
+    /// Whether the post was actually deleted
+    pub is_actual_deletion: bool,
     /// Title of the deleted post
     pub title: String,
 }
@@ -42,10 +56,9 @@ pub async fn admin_get_all_posts(
     State(state): State<AppState>,
     Extension(_user_id): Extension<UserId>,
 ) -> Result<Json<Vec<BlogPostResponse>>, StatusCode> {
-    let posts = queries::get_all_posts(&state.db).await.map_err(|e| {
-        tracing::error!("Failed to fetch all posts: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let posts = queries::get_all_posts(&state.db)
+        .await
+        .map_err(|e| db_error_to_status(e, "All posts"))?;
 
     let response: Vec<BlogPostResponse> = posts.into_iter().map(Into::into).collect();
     Ok(Json(response))
@@ -76,10 +89,7 @@ pub async fn admin_get_post_by_id(
 ) -> Result<Json<BlogPostResponse>, StatusCode> {
     let post = queries::get_post_by_id(&state.db, post_id, None)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch post {}: {:?}", post_id, e);
-            StatusCode::NOT_FOUND
-        })?;
+        .map_err(|e| db_error_to_status(e, &format!("Post {}", post_id)))?;
 
     Ok(Json(post.into()))
 }
@@ -113,10 +123,7 @@ pub async fn admin_create_post(
         *user_id,
     )
     .await
-    .map_err(|e| {
-        tracing::error!("Failed to create post: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    .map_err(|e| db_error_to_status(e, "Create post"))?;
 
     Ok((StatusCode::CREATED, Json(BlogPostResponse::from(post))))
 }
@@ -155,16 +162,7 @@ pub async fn admin_update_post(
         &update_post.status,
     )
     .await
-    .map_err(|e| match e {
-        sqlx::Error::RowNotFound => {
-            tracing::error!("Post {} not found", post_id);
-            StatusCode::NOT_FOUND
-        }
-        _ => {
-            tracing::error!("Failed to update post {}: {:?}", post_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    })?;
+    .map_err(|e| db_error_to_status(e, &format!("Post {}", post_id)))?;
 
     Ok(Json(post.into()))
 }
@@ -193,13 +191,10 @@ pub async fn admin_delete_post(
 ) -> Result<Json<DeletePostResponse>, StatusCode> {
     let result = queries::delete_post(&state.db, post_id)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to delete post {}: {:?}", post_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map_err(|e| db_error_to_status(e, &format!("Post {}", post_id)))?;
 
     Ok(Json(DeletePostResponse {
-        is_deleted: result.is_deleted,
+        is_actual_deletion: result.is_actual_deletion,
         title: result.title,
     }))
 }

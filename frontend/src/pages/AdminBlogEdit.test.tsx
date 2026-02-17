@@ -77,15 +77,6 @@ describe('AdminBlogEdit - Create Mode', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('/admin/blog')
   })
-
-  it('cancel button navigates to admin blog list', async () => {
-    render(<AdminBlogEdit />)
-
-    const cancelButton = screen.getByRole('button', { name: /Cancel/i })
-    await cancelButton.click()
-
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/blog')
-  })
 })
 
 describe('AdminBlogEdit - Edit Mode', () => {

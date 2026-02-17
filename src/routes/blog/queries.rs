@@ -2,6 +2,14 @@ use crate::domain::{BlogPost, BlogPostStatus};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+fn status_from_str(s: &str) -> BlogPostStatus {
+    if s == "published" {
+        BlogPostStatus::Published
+    } else {
+        BlogPostStatus::Draft
+    }
+}
+
 #[tracing::instrument(name = "Fetch published blog posts from database", skip(pool))]
 pub async fn get_published_posts(pool: &PgPool) -> Result<Vec<BlogPost>, sqlx::Error> {
     let posts = sqlx::query!(
@@ -28,11 +36,7 @@ pub async fn get_published_posts(pool: &PgPool) -> Result<Vec<BlogPost>, sqlx::E
         id: row.id,
         title: row.title,
         content: row.content,
-        status: if row.status == "published" {
-            BlogPostStatus::Published
-        } else {
-            BlogPostStatus::Draft
-        },
+        status: status_from_str(&row.status),
         author_id: row.author_id,
         author_username: Some(row.author_username),
         created_at: row.created_at,
@@ -78,18 +82,12 @@ pub async fn get_post_by_id(
         .fetch_one(pool)
         .await?;
 
+    let status_str: String = row.try_get("status")?;
     Ok(BlogPost {
         id: row.try_get("id")?,
         title: row.try_get("title")?,
         content: row.try_get("content")?,
-        status: {
-            let status_str: String = row.try_get("status")?;
-            if status_str == "published" {
-                BlogPostStatus::Published
-            } else {
-                BlogPostStatus::Draft
-            }
-        },
+        status: status_from_str(&status_str),
         author_id: row.try_get("author_id")?,
         author_username: row.try_get("author_username").ok(),
         created_at: row.try_get("created_at")?,
@@ -122,11 +120,7 @@ pub async fn get_all_posts(pool: &PgPool) -> Result<Vec<BlogPost>, sqlx::Error> 
         id: row.id,
         title: row.title,
         content: row.content,
-        status: if row.status == "published" {
-            BlogPostStatus::Published
-        } else {
-            BlogPostStatus::Draft
-        },
+        status: status_from_str(&row.status),
         author_id: row.author_id,
         author_username: Some(row.author_username),
         created_at: row.created_at,
@@ -167,11 +161,7 @@ pub async fn insert_post(
         id: row.id,
         title: row.title,
         content: row.content,
-        status: if row.status == "published" {
-            BlogPostStatus::Published
-        } else {
-            BlogPostStatus::Draft
-        },
+        status: status_from_str(&row.status),
         author_id: row.author_id,
         author_username: None,
         created_at: row.created_at,
@@ -208,11 +198,7 @@ pub async fn update_post(
         id: row.id,
         title: row.title,
         content: row.content,
-        status: if row.status == "published" {
-            BlogPostStatus::Published
-        } else {
-            BlogPostStatus::Draft
-        },
+        status: status_from_str(&row.status),
         author_id: row.author_id,
         author_username: None,
         created_at: row.created_at,
@@ -221,7 +207,7 @@ pub async fn update_post(
 }
 
 pub struct DeletePostResult {
-    pub is_deleted: bool,
+    pub is_actual_deletion: bool,
     pub title: String,
 }
 
@@ -244,7 +230,7 @@ pub async fn delete_post(pool: &PgPool, post_id: Uuid) -> Result<DeletePostResul
         Some(record) => record.title,
         None => {
             return Ok(DeletePostResult {
-                is_deleted: false,
+                is_actual_deletion: false,
                 title: String::new(),
             });
         }
@@ -262,7 +248,7 @@ pub async fn delete_post(pool: &PgPool, post_id: Uuid) -> Result<DeletePostResul
     .await?;
 
     Ok(DeletePostResult {
-        is_deleted: result.rows_affected() > 0,
+        is_actual_deletion: result.rows_affected() > 0,
         title,
     })
 }

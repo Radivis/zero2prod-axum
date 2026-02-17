@@ -17,12 +17,42 @@ import {
   ToggleButtonGroup,
   Tooltip,
 } from '@mui/material'
+import { LoadingState } from '../components/LoadingState'
+import { ErrorState } from '../components/ErrorState'
 import { Save, Cancel, LightMode, DarkMode } from '@mui/icons-material'
 import SimpleMDE from 'react-simplemde-editor'
 import 'easymde/dist/easymde.min.css'
-import { fetchAdminPost, createPost, updatePost, NewBlogPost, UpdateBlogPost } from '../api/blog'
+import {
+  fetchAdminPost,
+  createPost,
+  updatePost,
+  NewBlogPost,
+  UpdateBlogPost,
+  type BlogPostStatus,
+} from '../api/blog'
 import { useTheme } from '../contexts/ThemeContext'
+import { DARK_THEME_EDITOR } from '../theme'
+import { ROUTES } from '../constants/routes'
+import { BLOG_QUERY_KEYS } from '../constants/queryKeys'
 import type EasyMDE from 'easymde'
+
+// Editor theme colors - light mode uses constants; dark mode uses DARK_THEME_EDITOR from theme
+const PREVIEW_STATE_CHECK_INTERVAL_MS = 200
+const EDITOR_BG_LIGHT = '#fff'
+const EDITOR_TEXT_LIGHT = '#000'
+const EDITOR_BORDER_LIGHT = 'rgba(0, 0, 0, 0.23)'
+const EDITOR_TOOLBAR_BG_LIGHT = '#f9f9f9'
+const EDITOR_TOOLBAR_BORDER_LIGHT = '#ddd'
+const EDITOR_TOOLBAR_BORDER_DARKER = '#d9d9d9'
+const EDITOR_BUTTON_HOVER_LIGHT = '#e0e0e0'
+const EDITOR_BUTTON_ACTIVE_LIGHT = '#d0d0d0'
+const PREVIEW_BG_LIGHT = '#fafafa'
+const PREVIEW_CODE_BG_LIGHT = '#f5f5f5'
+const LIGHT_ACCENT_BLUE = '#1976d2'
+const PREVIEW_BLOCKQUOTE_BORDER_LIGHT = LIGHT_ACCENT_BLUE
+const PREVIEW_BLOCKQUOTE_TEXT_LIGHT = '#666'
+const PREVIEW_TABLE_HEADER_LIGHT = '#f0f0f0'
+const PREVIEW_LINK_LIGHT = LIGHT_ACCENT_BLUE
 
 function AdminBlogEdit() {
   const { id } = useParams<{ id: string }>()
@@ -33,13 +63,13 @@ function AdminBlogEdit() {
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [status, setStatus] = useState<'draft' | 'published'>('draft')
+  const [status, setStatus] = useState<BlogPostStatus>('draft')
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>(currentTheme)
   const [isPreviewActive, setIsPreviewActive] = useState(false)
   const editorRef = useRef<EasyMDE | null>(null)
 
   const { data: post, isLoading, error } = useQuery({
-    queryKey: ['admin-blog-post', id],
+    queryKey: BLOG_QUERY_KEYS.adminPost(id!),
     queryFn: () => fetchAdminPost(id!),
     enabled: isEditMode,
   })
@@ -60,17 +90,17 @@ function AdminBlogEdit() {
   const createMutation = useMutation({
     mutationFn: createPost,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-blog-posts'] })
-      navigate('/admin/blog')
+      queryClient.invalidateQueries({ queryKey: BLOG_QUERY_KEYS.adminList })
+      navigate(ROUTES.adminBlog)
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateBlogPost }) => updatePost(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-blog-posts'] })
-      queryClient.invalidateQueries({ queryKey: ['admin-blog-post', id] })
-      navigate('/admin/blog')
+      queryClient.invalidateQueries({ queryKey: BLOG_QUERY_KEYS.adminList })
+      queryClient.invalidateQueries({ queryKey: BLOG_QUERY_KEYS.adminPost(id!) })
+      navigate(ROUTES.adminBlog)
     },
   })
 
@@ -91,7 +121,7 @@ function AdminBlogEdit() {
   }
 
   const handleCancel = () => {
-    navigate('/admin/blog')
+    navigate(ROUTES.adminBlog)
   }
 
   // Monitor preview state changes
@@ -104,7 +134,7 @@ function AdminBlogEdit() {
     }
 
     // Check periodically (SimpleMDE doesn't have direct mode change events)
-    const interval = setInterval(checkPreviewState, 200)
+    const interval = setInterval(checkPreviewState, PREVIEW_STATE_CHECK_INTERVAL_MS)
     
     return () => clearInterval(interval)
   }, [])
@@ -141,20 +171,14 @@ function AdminBlogEdit() {
   }
 
   if (isEditMode && isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    )
+    return <LoadingState />
   }
 
   if (isEditMode && error) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <Alert severity="error">
-          {error instanceof Error ? error.message : 'Failed to load blog post'}
-        </Alert>
-      </Box>
+      <ErrorState
+        message={error instanceof Error ? error.message : 'Failed to load blog post'}
+      />
     )
   }
 
@@ -189,7 +213,7 @@ function AdminBlogEdit() {
             <InputLabel>Status</InputLabel>
             <Select
               value={status}
-              onChange={(e) => setStatus(e.target.value as 'draft' | 'published')}
+              onChange={(e) => setStatus(e.target.value as BlogPostStatus)}
               label="Status"
               disabled={isSubmitting}
             >
@@ -230,54 +254,54 @@ function AdminBlogEdit() {
               className={`editor-wrapper ${currentTheme === 'dark' ? 'dark-editor' : ''} ${previewTheme === 'dark' ? 'dark-preview' : ''}`}
               sx={{
                 '& .CodeMirror': {
-                  backgroundColor: currentTheme === 'dark' ? '#1e1e1e' : '#fff',
-                  color: currentTheme === 'dark' ? '#d4d4d4' : '#000',
+                  backgroundColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.bg : EDITOR_BG_LIGHT,
+                  color: currentTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                   border: '1px solid',
-                  borderColor: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.23)',
+                  borderColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.border : EDITOR_BORDER_LIGHT,
                 },
                 '& .CodeMirror-cursor': {
-                  borderColor: currentTheme === 'dark' ? '#d4d4d4' : '#000',
+                  borderColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                 },
                 '& .editor-toolbar': {
-                  backgroundColor: currentTheme === 'dark' ? '#2d2d2d' : '#f9f9f9',
-                  borderColor: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : '#ddd',
+                  backgroundColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.toolbar : EDITOR_TOOLBAR_BG_LIGHT,
+                  borderColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.border : EDITOR_TOOLBAR_BORDER_LIGHT,
                 },
                 '& .editor-toolbar button': {
-                  color: currentTheme === 'dark' ? '#d4d4d4' : '#000',
+                  color: currentTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                   '&:hover': {
-                    backgroundColor: currentTheme === 'dark' ? '#3e3e3e' : '#e0e0e0',
+                    backgroundColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.buttonHover : EDITOR_BUTTON_HOVER_LIGHT,
                   },
                   '&.active': {
-                    backgroundColor: currentTheme === 'dark' ? '#4e4e4e' : '#d0d0d0',
+                    backgroundColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.buttonActive : EDITOR_BUTTON_ACTIVE_LIGHT,
                   },
                 },
                 '& .editor-toolbar i.separator': {
-                  borderColor: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : '#d9d9d9',
+                  borderColor: currentTheme === 'dark' ? DARK_THEME_EDITOR.border : EDITOR_TOOLBAR_BORDER_DARKER,
                 },
                 '& .editor-preview, & .editor-preview-side': {
-                  backgroundColor: previewTheme === 'dark' ? '#121212' : '#fafafa',
-                  color: previewTheme === 'dark' ? '#e0e0e0' : '#000',
+                  backgroundColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.bg : PREVIEW_BG_LIGHT,
+                  color: previewTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                 },
                 '& .editor-preview pre, & .editor-preview-side pre': {
-                  backgroundColor: previewTheme === 'dark' ? '#1e1e1e' : '#f5f5f5',
-                  color: previewTheme === 'dark' ? '#d4d4d4' : '#000',
+                  backgroundColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.paper : PREVIEW_CODE_BG_LIGHT,
+                  color: previewTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                 },
                 '& .editor-preview code, & .editor-preview-side code': {
-                  backgroundColor: previewTheme === 'dark' ? '#1e1e1e' : '#f5f5f5',
-                  color: previewTheme === 'dark' ? '#d4d4d4' : '#000',
+                  backgroundColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.paper : PREVIEW_CODE_BG_LIGHT,
+                  color: previewTheme === 'dark' ? DARK_THEME_EDITOR.text : EDITOR_TEXT_LIGHT,
                 },
                 '& .editor-preview blockquote, & .editor-preview-side blockquote': {
-                  borderLeftColor: previewTheme === 'dark' ? '#90caf9' : '#1976d2',
-                  color: previewTheme === 'dark' ? '#b0b0b0' : '#666',
+                  borderLeftColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.blockquoteBorder : PREVIEW_BLOCKQUOTE_BORDER_LIGHT,
+                  color: previewTheme === 'dark' ? DARK_THEME_EDITOR.text : PREVIEW_BLOCKQUOTE_TEXT_LIGHT,
                 },
                 '& .editor-preview table th, & .editor-preview-side table th': {
-                  backgroundColor: previewTheme === 'dark' ? '#2d2d2d' : '#f0f0f0',
+                  backgroundColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.toolbar : PREVIEW_TABLE_HEADER_LIGHT,
                 },
                 '& .editor-preview table td, & .editor-preview table th, & .editor-preview-side table td, & .editor-preview-side table th': {
-                  borderColor: previewTheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : '#ddd',
+                  borderColor: previewTheme === 'dark' ? DARK_THEME_EDITOR.border : EDITOR_TOOLBAR_BORDER_LIGHT,
                 },
                 '& .editor-preview a, & .editor-preview-side a': {
-                  color: previewTheme === 'dark' ? '#90caf9' : '#1976d2',
+                  color: previewTheme === 'dark' ? DARK_THEME_EDITOR.link : PREVIEW_LINK_LIGHT,
                 },
               }}
             >

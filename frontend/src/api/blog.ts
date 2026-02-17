@@ -1,10 +1,12 @@
 import { apiRequest } from './client'
 
+export type BlogPostStatus = 'draft' | 'published'
+
 export interface BlogPost {
   id: string
   title: string
   content: string
-  status: 'draft' | 'published'
+  status: BlogPostStatus
   author_username: string
   created_at: string
   updated_at: string
@@ -13,17 +15,18 @@ export interface BlogPost {
 export interface NewBlogPost {
   title: string
   content: string
-  status: 'draft' | 'published'
+  status: BlogPostStatus
 }
 
 export interface UpdateBlogPost {
   title: string
   content: string
-  status: 'draft' | 'published'
+  status: BlogPostStatus
 }
 
 export interface DeleteResponse {
-  message: string
+  is_actual_deletion: boolean
+  title: string
 }
 
 // Public API functions
