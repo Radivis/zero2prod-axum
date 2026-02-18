@@ -17,7 +17,7 @@ React + TypeScript frontend for the Zero2Prod newsletter application.
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 24+ and npm
 - Backend server running on `http://localhost:8000`
 
 ### Getting Started
