@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react'
-import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
+import { createContext, useContext, ReactNode } from 'react'
+import { ThemeProvider as MuiThemeProvider, useColorScheme } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
 import { theme } from '../theme'
 
@@ -14,19 +14,31 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 const THEME_STORAGE_KEY = 'theme-mode'
 
-function getInitialTheme(): ThemeMode {
-  // Check localStorage first
-  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY)
-  if (storedTheme === 'light' || storedTheme === 'dark') {
-    return storedTheme
+interface ThemeContextBridgeProps {
+  children: ReactNode
+}
+
+function ThemeContextBridge({ children }: ThemeContextBridgeProps) {
+  const { mode, setMode, systemMode } = useColorScheme()
+
+  // Resolve display mode: when mode is 'system', use system preference
+  const resolvedMode: ThemeMode =
+    mode === 'system' ? (systemMode ?? 'light') : (mode ?? 'light')
+
+  const toggleTheme = () => {
+    setMode(resolvedMode === 'light' ? 'dark' : 'light')
   }
 
-  // Fallback to system preference
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark'
+  const contextValue: ThemeContextType = {
+    mode: resolvedMode,
+    toggleTheme,
   }
 
-  return 'light'
+  return (
+    <ThemeContext.Provider value={contextValue}>
+      {children}
+    </ThemeContext.Provider>
+  )
 }
 
 interface ThemeProviderProps {
@@ -34,32 +46,19 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [mode, setMode] = useState<ThemeMode>(getInitialTheme)
-
-  useEffect(() => {
-    // Save to localStorage whenever mode changes
-    localStorage.setItem(THEME_STORAGE_KEY, mode)
-  }, [mode])
-
-  // Sync document class for Pigment CSS colorSchemeSelector: 'class'
-  useEffect(() => {
-    document.documentElement.classList.remove('light', 'dark')
-    document.documentElement.classList.add(mode)
-  }, [mode])
-
-  const toggleTheme = () => {
-    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'))
-  }
-
-  const contextValue = useMemo(() => ({ mode, toggleTheme }), [mode])
-
   return (
-    <ThemeContext.Provider value={contextValue}>
-      <MuiThemeProvider theme={theme}>
+    <MuiThemeProvider
+      theme={theme}
+      modeStorageKey={THEME_STORAGE_KEY}
+      defaultMode="system"
+      noSsr
+      disableTransitionOnChange
+    >
+      <ThemeContextBridge>
         <CssBaseline />
         {children}
-      </MuiThemeProvider>
-    </ThemeContext.Provider>
+      </ThemeContextBridge>
+    </MuiThemeProvider>
   )
 }
 
