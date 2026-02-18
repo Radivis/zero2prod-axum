@@ -7,12 +7,6 @@ const backendUrl = `http://127.0.0.1:${backendPort}`;
 
 console.log(`[VITE CONFIG] Backend proxy target: ${backendUrl}`);
 
-// NOTE: Pigment CSS plugin temporarily disabled - MUI Badge (ownerState.anchorOrigin)
-// causes build error with Pigment. Will re-enable in a later phase when resolved.
-// import { pigment } from '@pigment-css/vite-plugin'
-// import { theme } from './src/theme'
-// plugins: [pigment({ transformLibraries: ['@mui/material'], theme }), react()],
-
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
