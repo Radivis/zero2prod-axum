@@ -4,7 +4,7 @@ React + TypeScript frontend for the Zero2Prod newsletter application.
 
 ## Tech Stack
 
-- **React 18** - UI library
+- **React 19** - UI library
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
 - **Material-UI (MUI)** - Component library

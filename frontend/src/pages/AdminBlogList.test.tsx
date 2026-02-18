@@ -5,8 +5,6 @@ import { render, createTestQueryClient } from '../test-utils/test-utils'
 import AdminBlogList from './AdminBlogList'
 import * as blogApi from '../api/blog'
 import type { BlogPost } from '../api/blog'
-import * as ReactRouter from 'react-router-dom'
-
 // Mock the blog API
 vi.mock('../api/blog', () => ({
   fetchAdminPosts: vi.fn(),
