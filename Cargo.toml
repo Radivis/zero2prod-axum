@@ -42,10 +42,10 @@ tracing-appender = { version = "0.2", optional = true }
 linkify = { version = "0.10", optional = true }
 
 [dependencies.reqwest]
-version = "0.12"
+version = "0.13"
 default-features = false
 # We need the `json` feature flag to serialize/deserialize JSON payloads
-features = ["cookies", "json", "rustls-tls"]
+features = ["cookies", "json", "rustls"]
 
 # Using table-like toml syntax to avoid a super-long line!
 [dependencies.sqlx]
