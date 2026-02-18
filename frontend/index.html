@@ -4,10 +4,8 @@
     <script>
       (function() {
         var stored = localStorage.getItem('theme-mode');
-        var mode = (stored === 'light' || stored === 'dark')
-          ? stored
+        var mode = (stored === 'light' || stored === 'dark') ? stored
           : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.classList.remove('light', 'dark');
         document.documentElement.classList.add(mode);
       })();
     </script>
