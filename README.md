@@ -52,5 +52,6 @@ Some improvements over the solutions from the book
 - Complete the exercises from the end of chapter 7
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
-- Update backend dependencies where reasonable
-- Refactor to Tailwind + shadcn/ui? MUI Update 6 -> 7 was a complete and utter failure.
+
+### Future Options
+- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
