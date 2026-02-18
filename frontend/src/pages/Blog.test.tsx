@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
-import { render, createTestQueryClient } from '../test-utils/test-utils'
+import { render } from '../test-utils/test-utils'
 import Blog from './Blog'
 import * as blogApi from '../api/blog'
 import type { BlogPost } from '../api/blog'
@@ -60,7 +60,7 @@ describe('Blog', () => {
       disconnect: vi.fn(),
     }
 
-    global.IntersectionObserver = class MockIntersectionObserver {
+    globalThis.IntersectionObserver = class MockIntersectionObserver {
       constructor(callback: IntersectionObserverCallback) {
         observerCallback = callback
         return observerInstance as any
@@ -193,7 +193,7 @@ describe('Blog', () => {
       {
         isIntersecting: true,
         target: document.createElement('div'),
-      } as IntersectionObserverEntry,
+      } as unknown as IntersectionObserverEntry,
     ]
 
     if (observerCallback) {

@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest'
+import { vi } from 'vitest'
 
 // Mock IntersectionObserver
-global.IntersectionObserver = class IntersectionObserver {
+globalThis.IntersectionObserver = class IntersectionObserver {
   constructor() {}
   disconnect() {}
   observe() {}

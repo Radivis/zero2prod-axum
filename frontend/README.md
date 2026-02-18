@@ -4,10 +4,10 @@ React + TypeScript frontend for the Zero2Prod newsletter application.
 
 ## Tech Stack
 
-- **React 18** - UI library
+- **React 19** - UI library
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
-- **Material-UI (MUI)** - Component library
+- **Material-UI (MUI) v6** - Component library
 - **React Router** - Client-side routing
 - **TanStack Query** - Server state management
 - **Playwright** - E2E testing
@@ -17,7 +17,7 @@ React + TypeScript frontend for the Zero2Prod newsletter application.
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 24+ and npm
 - Backend server running on `http://localhost:8000`
 
 ### Getting Started
