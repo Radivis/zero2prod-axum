@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react'
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
-import { getTheme } from '../theme'
+import { theme } from '../theme'
 
 type ThemeMode = 'light' | 'dark'
 
@@ -41,11 +41,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     localStorage.setItem(THEME_STORAGE_KEY, mode)
   }, [mode])
 
+  // Sync document class for Pigment CSS colorSchemeSelector: 'class'
+  useEffect(() => {
+    document.documentElement.classList.remove('light', 'dark')
+    document.documentElement.classList.add(mode)
+  }, [mode])
+
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'))
   }
-
-  const theme = useMemo(() => getTheme(mode), [mode])
 
   const contextValue = useMemo(() => ({ mode, toggleTheme }), [mode])
 
