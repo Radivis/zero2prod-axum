@@ -11,3 +11,4 @@ mod subscriptions;
 mod subscriptions_confirm;
 mod subscriptions_unsubscribe;
 mod test_app;
+mod test_data;

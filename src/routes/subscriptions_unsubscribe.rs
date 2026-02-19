@@ -1,46 +1,18 @@
-use crate::routes::subscriptions_confirm::get_subscriber_id_from_token;
+use crate::routes::subscription_tokens::{
+    SubscriptionTokenParameters, TokenError, get_subscriber_email_from_token,
+    get_subscriber_id_from_token,
+};
 use crate::routes::utils::is_valid_uuid_token;
 use crate::startup::AppState;
-use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use uuid::Uuid;
 
-#[derive(serde::Deserialize, utoipa::IntoParams)]
-#[allow(unused)]
-pub struct Parameters {
-    /// Subscription token received via email
-    subscription_token: String,
-}
-
 #[derive(serde::Serialize)]
 pub struct UnsubscribeInfo {
     email: String,
-}
-
-#[tracing::instrument(name = "Get subscriber email from token", skip(subscription_token, db))]
-pub async fn get_subscriber_email_from_token(
-    db: &sqlx::PgPool,
-    subscription_token: &str,
-) -> Result<Option<String>, sqlx::Error> {
-    let result = sqlx::query!(
-        r#"
-        SELECT s.email
-        FROM subscriptions s
-        JOIN subscription_tokens st ON s.id = st.subscriber_id
-        WHERE st.subscription_token = $1
-        "#,
-        subscription_token,
-    )
-    .fetch_optional(db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to execute query: {:?}", e);
-        e
-    })?;
-    Ok(result.map(|r| r.email))
 }
 
 #[tracing::instrument(name = "Delete subscriber", skip(subscriber_id, db))]
@@ -55,32 +27,8 @@ pub async fn delete_subscriber(db: &sqlx::PgPool, subscriber_id: Uuid) -> Result
     Ok(())
 }
 
-#[derive(thiserror::Error)]
-pub enum UnsubscribeError {
-    #[error("Malformed subscription token")]
-    InvalidTokenFormat,
-    #[error("Invalid or expired subscription token")]
-    InvalidToken,
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-impl std::fmt::Debug for UnsubscribeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        error_chain_fmt(self, f)
-    }
-}
-
-impl IntoResponse for UnsubscribeError {
-    fn into_response(self) -> axum::response::Response {
-        let status = match self {
-            UnsubscribeError::InvalidTokenFormat => StatusCode::BAD_REQUEST,
-            UnsubscribeError::InvalidToken => StatusCode::UNAUTHORIZED,
-            UnsubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        (status, self.to_string()).into_response()
-    }
-}
+/// Unsubscribe token parameters (re-export for OpenAPI)
+pub type Parameters = SubscriptionTokenParameters;
 
 /// Get unsubscribe information
 ///
@@ -102,17 +50,17 @@ impl IntoResponse for UnsubscribeError {
 pub async fn get_unsubscribe_info(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
-) -> Result<impl IntoResponse, UnsubscribeError> {
+) -> Result<impl IntoResponse, TokenError> {
     // Validate token format before querying the database
     if !is_valid_uuid_token(&parameters.subscription_token) {
-        return Err(UnsubscribeError::InvalidTokenFormat);
+        return Err(TokenError::InvalidTokenFormat);
     }
 
     let email = get_subscriber_email_from_token(&state.db, &parameters.subscription_token)
         .await
         .context("Failed to retrieve subscriber email from token")?;
 
-    let email = email.ok_or(UnsubscribeError::InvalidToken)?;
+    let email = email.ok_or(TokenError::InvalidToken)?;
 
     Ok(axum::Json(UnsubscribeInfo { email }))
 }
@@ -137,17 +85,17 @@ pub async fn get_unsubscribe_info(
 pub async fn confirm_unsubscribe(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
-) -> Result<impl IntoResponse, UnsubscribeError> {
+) -> Result<impl IntoResponse, TokenError> {
     // Validate token format before querying the database
     if !is_valid_uuid_token(&parameters.subscription_token) {
-        return Err(UnsubscribeError::InvalidTokenFormat);
+        return Err(TokenError::InvalidTokenFormat);
     }
 
     let subscriber_id = get_subscriber_id_from_token(&state.db, &parameters.subscription_token)
         .await
         .context("Failed to retrieve subscriber ID from token")?;
 
-    let subscriber_id = subscriber_id.ok_or(UnsubscribeError::InvalidToken)?;
+    let subscriber_id = subscriber_id.ok_or(TokenError::InvalidToken)?;
 
     delete_subscriber(&state.db, subscriber_id)
         .await

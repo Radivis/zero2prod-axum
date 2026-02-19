@@ -6,6 +6,7 @@ use tracing::{Span, field::display};
 use uuid::Uuid;
 
 use crate::domain::SubscriberEmailAddress;
+use crate::routes::constants::unsubscribe_url;
 use crate::{configuration::Settings, startup::get_connection_pool};
 
 struct NewsletterIssue {
@@ -24,16 +25,16 @@ pub enum ExecutionOutcome {
     EmptyQueue,
 }
 
+const EMPTY_QUEUE_POLL_INTERVAL_SECS: u64 = 10;
+const ERROR_RETRY_DELAY_SECS: u64 = 1;
+
 fn add_unsubscribe_footer(
     html_content: &str,
     text_content: &str,
     base_url: &str,
     subscription_token: &str,
 ) -> (String, String) {
-    let unsubscribe_link = format!(
-        "{}/subscriptions/unsubscribe?token={}",
-        base_url, subscription_token
-    );
+    let unsubscribe_link = unsubscribe_url(base_url, subscription_token);
 
     let html_footer = format!(
         "<hr><p><small>To unsubscribe, <a href=\"{}\">click here</a></small></p>",
@@ -65,10 +66,10 @@ async fn worker_loop(
     loop {
         match try_execute_task(&pool, &email_client, &base_url).await {
             Ok(ExecutionOutcome::EmptyQueue) => {
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                tokio::time::sleep(Duration::from_secs(EMPTY_QUEUE_POLL_INTERVAL_SECS)).await;
             }
             Err(_) => {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(ERROR_RETRY_DELAY_SECS)).await;
             }
             Ok(ExecutionOutcome::TaskCompleted) => {}
         }

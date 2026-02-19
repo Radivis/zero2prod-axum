@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT email, status FROM subscriptions WHERE email = 'ursula_le_guin@gmail.com'",
+  "query": "SELECT email, status FROM subscriptions WHERE email = $1",
   "describe": {
     "columns": [
       {
@@ -15,12 +15,14 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
       false,
       false
     ]
   },
-  "hash": "30bf2f9d556d66b6a1397eafff366693f27c24b6303848480e5a6cc13e47831a"
+  "hash": "f9df95cf9269b81ad6c69fce17c755fde4dde68778065facf58f163acf2527ff"
 }

@@ -1,5 +1,8 @@
 use crate::domain::{NewSubscriber, SubscriberEmailAddress, SubscriberName};
 use crate::email_client::{EmailClient, EmailData};
+use crate::routes::constants::{
+    SUBSCRIPTION_STATUS_PENDING_CONFIRMATION, subscription_confirm_url,
+};
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
@@ -177,12 +180,13 @@ pub async fn insert_subscriber(
     let query = sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at, status)
-        VALUES ($1, $2, $3, $4, 'pending_confirmation')
+        VALUES ($1, $2, $3, $4, $5)
         "#,
         subscriber_id,
         new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
-        Utc::now()
+        Utc::now(),
+        SUBSCRIPTION_STATUS_PENDING_CONFIRMATION
     );
 
     transaction.execute(query).await?;
@@ -199,10 +203,7 @@ pub async fn send_confirmation_email(
     base_url: &str,
     subscription_token: &str,
 ) -> Result<(), reqwest::Error> {
-    let confirmation_link = &format!(
-        "{}/subscriptions/confirm?subscription_token={}",
-        base_url, subscription_token
-    );
+    let confirmation_link = subscription_confirm_url(base_url, subscription_token);
     tracing::debug!(
         "Trying to send email to subscriber via email_client: {:?}",
         &email_client

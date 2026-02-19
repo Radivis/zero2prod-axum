@@ -173,6 +173,27 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
+    pub fn get_unsubscribe_url(&self, subscription_token: &str) -> String {
+        format!(
+            "{}/api/subscriptions/unsubscribe?subscription_token={}",
+            self.address, subscription_token
+        )
+    }
+
+    pub async fn get_unsubscribe_info(&self, subscription_token: &str) -> reqwest::Response {
+        reqwest::get(self.get_unsubscribe_url(subscription_token))
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_unsubscribe(&self, subscription_token: &str) -> reqwest::Response {
+        self.api_client
+            .post(self.get_unsubscribe_url(subscription_token))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
     // Blog public endpoints
     pub async fn get_published_posts(&self) -> reqwest::Response {
         self.api_client

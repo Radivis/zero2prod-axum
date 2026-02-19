@@ -2,6 +2,9 @@
 
 use uuid::Uuid;
 
+/// Length of a UUID in simple format (32 hex chars, no hyphens)
+const UUID_SIMPLE_FORMAT_LEN: usize = 32;
+
 /// Validates that a token string is a well-formatted UUID (with or without hyphens).
 /// Returns true if valid, false otherwise.
 ///
@@ -13,7 +16,7 @@ pub fn is_valid_uuid_token(token: &str) -> bool {
     }
 
     // Try parsing as simple format (32 hex chars without hyphens)
-    if token.len() == 32 && token.chars().all(|c| c.is_ascii_hexdigit()) {
+    if token.len() == UUID_SIMPLE_FORMAT_LEN && token.chars().all(|c| c.is_ascii_hexdigit()) {
         return true;
     }
 

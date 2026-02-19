@@ -4,6 +4,7 @@ pub mod constants;
 pub mod health_check; // Public for OpenAPI annotations
 pub mod initial_password; // Public for OpenAPI annotations
 pub mod login; // Public for OpenAPI annotations
+pub mod subscription_tokens; // Shared types for confirm/unsubscribe
 mod subscriptions;
 pub mod subscriptions_confirm; // Public for OpenAPI annotations
 pub mod subscriptions_unsubscribe; // Public for OpenAPI annotations

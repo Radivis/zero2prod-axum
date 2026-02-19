@@ -159,6 +159,14 @@ impl Application {
         struct ApiDoc;
 
         // Build API router first
+        #[cfg(any(test, feature = "e2e-tests"))]
+        let test_routes = Router::new().route(
+            "/test/subscription-token",
+            get(crate::routes::test_helpers::get_subscription_token_for_email),
+        );
+        #[cfg(not(any(test, feature = "e2e-tests")))]
+        let test_routes = Router::new();
+
         let api_router = Router::new()
             // Auth & users (no auth required)
             .route("/users/exists", get(check_users_exist_endpoint))
@@ -172,11 +180,7 @@ impl Application {
                 "/subscriptions/unsubscribe",
                 get(get_unsubscribe_info).post(confirm_unsubscribe),
             )
-            // Test-only helpers
-            .route(
-                "/test/subscription-token",
-                get(crate::routes::test_helpers::get_subscription_token_for_email),
-            )
+            .merge(test_routes)
             // Blog - public endpoints (no auth required)
             .route("/blog/posts", get(get_published_posts))
             .route("/blog/posts/{id}", get(get_post_by_id))
