@@ -53,6 +53,7 @@ Some improvements over the solutions from the book
 ## Roadmap
 
 - Complete the exercises from the end of chapter 7
+- Add unsubscribe functionality
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
 

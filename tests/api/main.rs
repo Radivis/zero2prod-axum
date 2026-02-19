@@ -9,4 +9,5 @@ mod macros;
 mod newsletter;
 mod subscriptions;
 mod subscriptions_confirm;
+mod subscriptions_unsubscribe;
 mod test_app;

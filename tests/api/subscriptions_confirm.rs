@@ -15,6 +15,43 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
 }
 
 #[tokio::test]
+async fn confirmations_with_malformed_token_are_rejected_with_a_400() {
+    // Arrange
+    let app = spawn_app(function_name!()).await;
+    let malformed_token = "not-a-valid-uuid";
+
+    // Act
+    let response = reqwest::get(&format!(
+        "{}/api/subscriptions/confirm?subscription_token={}",
+        app.address, malformed_token
+    ))
+    .await
+    .unwrap();
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 400);
+}
+
+#[tokio::test]
+async fn confirmations_with_nonexistent_token_are_rejected_with_a_401() {
+    // Arrange
+    let app = spawn_app(function_name!()).await;
+    // Valid UUID format but doesn't exist in database
+    let nonexistent_token = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6";
+
+    // Act
+    let response = reqwest::get(&format!(
+        "{}/api/subscriptions/confirm?subscription_token={}",
+        app.address, nonexistent_token
+    ))
+    .await
+    .unwrap();
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 401);
+}
+
+#[tokio::test]
 async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     // Arrange
     let app = spawn_app(function_name!()).await;

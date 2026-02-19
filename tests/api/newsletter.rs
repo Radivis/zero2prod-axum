@@ -392,3 +392,73 @@ async fn create_confirmed_subscriber(app: &TestApp) {
         .error_for_status()
         .unwrap();
 }
+
+#[tokio::test]
+async fn newsletter_contains_unsubscribe_link() {
+    // Arrange
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
+    create_confirmed_subscriber(&container.app).await;
+
+    // Mount a fresh mock for the newsletter email (after confirmation email)
+    when_sending_an_email()
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&container.app.email_server)
+        .await;
+
+    // Act - Send newsletter
+    let response = container
+        .app
+        .post_newsletters(&serde_json::json!({
+            "title": "Newsletter title",
+            "text_content": "Newsletter body as plain text",
+            "html_content": "<p>Newsletter body as HTML</p>",
+            "idempotency_key": uuid::Uuid::new_v4().to_string()
+        }))
+        .await;
+
+    assert_eq!(response.status().as_u16(), 200);
+
+    // Dispatch the emails
+    container.app.dispatch_all_pending_emails().await;
+
+    // Assert - Check that the email contains unsubscribe link
+    let email_requests = container
+        .app
+        .email_server
+        .received_requests()
+        .await
+        .unwrap();
+
+    // The last email should be the newsletter (previous ones are confirmation emails)
+    let newsletter_request = email_requests.last().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&newsletter_request.body).unwrap();
+
+    let html_body = body["HtmlBody"].as_str().unwrap();
+    let text_body = body["TextBody"].as_str().unwrap();
+
+    // Verify HTML contains unsubscribe link (without /api prefix for frontend SPA)
+    assert!(
+        html_body.contains("/subscriptions/unsubscribe?token="),
+        "HTML body should contain unsubscribe link: {}",
+        html_body
+    );
+    assert!(
+        html_body.contains("To unsubscribe"),
+        "HTML body should contain unsubscribe text"
+    );
+
+    // Verify plain text contains unsubscribe link (without /api prefix for frontend SPA)
+    assert!(
+        text_body.contains("/subscriptions/unsubscribe?token="),
+        "Text body should contain unsubscribe link: {}",
+        text_body
+    );
+    assert!(
+        text_body.contains("To unsubscribe"),
+        "Text body should contain unsubscribe text"
+    );
+}

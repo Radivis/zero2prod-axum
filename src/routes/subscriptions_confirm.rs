@@ -1,3 +1,4 @@
+use crate::routes::utils::is_valid_uuid_token;
 use crate::startup::AppState;
 use crate::telemetry::error_chain_fmt;
 use anyhow::Context;
@@ -48,6 +49,8 @@ pub async fn get_subscriber_id_from_token(
 
 #[derive(thiserror::Error)]
 pub enum ConfirmError {
+    #[error("Malformed subscription token")]
+    InvalidTokenFormat,
     #[error("Invalid or expired subscription token")]
     InvalidToken,
     #[error(transparent)]
@@ -63,6 +66,7 @@ impl std::fmt::Debug for ConfirmError {
 impl IntoResponse for ConfirmError {
     fn into_response(self) -> axum::response::Response {
         let status = match self {
+            ConfirmError::InvalidTokenFormat => StatusCode::BAD_REQUEST,
             ConfirmError::InvalidToken => StatusCode::UNAUTHORIZED,
             ConfirmError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
@@ -90,6 +94,11 @@ pub async fn confirm(
     State(state): State<AppState>,
     Query(parameters): Query<Parameters>,
 ) -> Result<impl IntoResponse, ConfirmError> {
+    // Validate token format before querying the database
+    if !is_valid_uuid_token(&parameters.subscription_token) {
+        return Err(ConfirmError::InvalidTokenFormat);
+    }
+
     let subscriber_id = get_subscriber_id_from_token(&state.db, &parameters.subscription_token)
         .await
         .context("Failed to retrieve subscriber ID from token")?;

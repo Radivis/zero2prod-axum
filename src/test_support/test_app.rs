@@ -68,6 +68,14 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
 
     let email_server = MockServer::start().await;
 
+    // Mount a default mock for all email requests to allow subscriptions to work
+    // in E2E tests without explicitly mounting mocks
+    wiremock::Mock::given(wiremock::matchers::path("/email"))
+        .and(wiremock::matchers::method("POST"))
+        .respond_with(wiremock::ResponseTemplate::new(200))
+        .mount(&email_server)
+        .await;
+
     let configuration = {
         let mut c = get_configuration().expect("Failed to read configuration.");
         c.database.database_name = format!("test-{}", test_name);

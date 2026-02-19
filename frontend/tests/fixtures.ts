@@ -187,6 +187,86 @@ export async function makeUser(
   }, 3);  // Retry up to 3 times
 }
 
+/**
+ * Creates a confirmed newsletter subscriber via the REST API.
+ * 
+ * @param backendAddress - The backend server address
+ * @param email - The subscriber's email address
+ * @param name - The subscriber's name
+ * @returns Promise with the subscription token
+ */
+export async function makeConfirmedSubscriber(
+  backendAddress: string,
+  email: string,
+  name: string
+): Promise<string> {
+  // 1. Create subscription
+  await writeLog('makeConfirmedSubscriber', `Creating subscription for ${email}`, 'TEST');
+  
+  const subscribeResponse = await fetch(`${backendAddress}/api/subscriptions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, name })
+  });
+
+  if (!subscribeResponse.ok) {
+    const responseText = await subscribeResponse.text();
+    let errorData;
+    try {
+      errorData = JSON.parse(responseText);
+    } catch {
+      errorData = { error: responseText || 'Unknown error' };
+    }
+    
+    await writeLog('makeConfirmedSubscriber', `Failed to create subscription: ${subscribeResponse.status} ${subscribeResponse.statusText}`, 'TEST');
+    await writeLog('makeConfirmedSubscriber', `Response body: ${responseText}`, 'TEST');
+    
+    throw new Error(`Failed to create subscription: ${subscribeResponse.status} - ${errorData.error || responseText}`);
+  }
+
+  await writeLog('makeConfirmedSubscriber', `Subscription created successfully`, 'TEST');
+
+  // 2. Get the token from the test endpoint
+  await writeLog('makeConfirmedSubscriber', `Fetching token for ${email}`, 'TEST');
+  
+  const tokenResponse = await fetch(
+    `${backendAddress}/api/test/subscription-token?email=${encodeURIComponent(email)}`
+  );
+
+  if (!tokenResponse.ok) {
+    const responseText = await tokenResponse.text();
+    await writeLog('makeConfirmedSubscriber', `Failed to get subscription token: ${tokenResponse.status} ${responseText}`, 'TEST');
+    throw new Error(`Failed to get subscription token: ${tokenResponse.status}`);
+  }
+
+  const tokenData = await tokenResponse.json();
+  const token = tokenData.token;
+
+  if (!token) {
+    await writeLog('makeConfirmedSubscriber', 'No token returned from test endpoint', 'TEST');
+    throw new Error('No token returned from test endpoint');
+  }
+
+  await writeLog('makeConfirmedSubscriber', `Token retrieved: ${token.substring(0, 8)}...`, 'TEST');
+
+  // 3. Confirm the subscription using the token
+  await writeLog('makeConfirmedSubscriber', `Confirming subscription for ${email}`, 'TEST');
+  
+  const confirmResponse = await fetch(
+    `${backendAddress}/api/subscriptions/confirm?subscription_token=${token}`
+  );
+
+  if (!confirmResponse.ok) {
+    const responseText = await confirmResponse.text();
+    await writeLog('makeConfirmedSubscriber', `Failed to confirm subscription: ${confirmResponse.status} ${responseText}`, 'TEST');
+    throw new Error(`Failed to confirm subscription: ${confirmResponse.status}`);
+  }
+
+  await writeLog('makeConfirmedSubscriber', `Subscription confirmed successfully for ${email}`, 'TEST');
+
+  return token;
+}
+
 export async function login(
   username: string,
   password: string,
