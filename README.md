@@ -17,9 +17,12 @@ For CD there is a lefthook.yml file. You need to run
 `lefthook install`
 
 for the Git hooks to actually work.
+The same commands also updates the hooks, if you update the config file lefthook.yml.
 
 If you don't have lefthook installed, you need to install it first.
 I've tried Rust-based alternatives, but they are still a far cry from the simplicity of lefthook.
+
+When you perform a commit, it is suggested to do so in a console in which you can see the output.
 
 ### Startup
 Don't forget to start the Postgres and Redis/Valkey servers/Docker containers before trying anything!
@@ -52,5 +55,7 @@ Some improvements over the solutions from the book
 - Complete the exercises from the end of chapter 7
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
-- Update backend dependencies where reasonable
-- Refactor to Tailwind + shadcn/ui? MUI Update 6 -> 7 was a complete and utter failure.
+
+### Future Options
+- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
+- Integrate precise agentic workflow into the repo
