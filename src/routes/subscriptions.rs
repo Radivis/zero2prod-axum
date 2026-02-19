@@ -122,19 +122,33 @@ pub async fn subscribe(
     State(state): State<AppState>,
     Json(form): Json<FormData>,
 ) -> Result<impl IntoResponse, SubscribeError> {
-    let new_subscriber = form.try_into().map_err(SubscribeError::ValidationError)?;
+    let subscriber = form.try_into().map_err(SubscribeError::ValidationError)?;
     let mut transaction = state
         .db
         .begin()
         .await
         .context("Failed to acquire a Postgres connection from the pool")?;
-    let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
+
+    let subscription_token = match get_subscriber_id_by_email(&mut transaction, &subscriber)
         .await
-        .context("Failed to insert new subscriber in the database.")?;
-    let subscription_token = Uuid::new_v4().simple().to_string();
-    store_token(&mut transaction, subscriber_id, &subscription_token)
-        .await
-        .context("Failed to store the confirmation token for a new subscriber.")?;
+        .context("Failed to look up existing subscriber.")?
+    {
+        Some(existing_subscriber_id) => fetch_token(&mut transaction, existing_subscriber_id)
+            .await
+            .context("Failed to fetch subscription token for existing subscriber.")?
+            .expect("Existing subscriber must have a token"),
+        None => {
+            let subscriber_id = insert_subscriber(&mut transaction, &subscriber)
+                .await
+                .context("Failed to insert new subscriber in the database.")?;
+            let new_token = Uuid::new_v4().simple().to_string();
+            store_token(&mut transaction, subscriber_id, &new_token)
+                .await
+                .context("Failed to store the confirmation token for a new subscriber.")?;
+            new_token
+        }
+    };
+
     transaction
         .commit()
         .await
@@ -142,7 +156,7 @@ pub async fn subscribe(
 
     send_confirmation_email(
         &state.email_client,
-        new_subscriber,
+        subscriber,
         &state.base_url.0,
         &subscription_token,
     )
@@ -210,6 +224,37 @@ pub async fn send_confirmation_email(
             html_content,
         })
         .await
+}
+
+#[tracing::instrument(
+    name = "Get id of subscriber by email, if it exists",
+    skip(transaction)
+)]
+pub async fn get_subscriber_id_by_email(
+    transaction: &mut Transaction<'_, Postgres>,
+    subscriber: &NewSubscriber,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    let email = subscriber.email.as_ref();
+    let result = sqlx::query!(r#"SELECT id FROM subscriptions WHERE email = $1"#, email)
+        .fetch_optional(transaction.as_mut())
+        .await?;
+
+    Ok(result.map(|row| row.id))
+}
+
+#[tracing::instrument(name = "Fetch subscription token for subscriber", skip(transaction))]
+pub async fn fetch_token(
+    transaction: &mut Transaction<'_, Postgres>,
+    subscriber_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    let result = sqlx::query!(
+        r#"SELECT subscription_token FROM subscription_tokens WHERE subscriber_id = $1"#,
+        subscriber_id
+    )
+    .fetch_optional(transaction.as_mut())
+    .await?;
+
+    Ok(result.map(|row| row.subscription_token))
 }
 
 #[tracing::instrument(
