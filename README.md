@@ -49,11 +49,14 @@ Some improvements over the solutions from the book
 - Integration test logs are written into per test logfiles when run via nextest
 - The TestApp struct is refactored into two versions: One without user, and one with a user
 - Added basic blogging features
+- Added unsubscribe functionality
 
 ## Roadmap
 
-- Complete the exercises from the end of chapter 7
-- Add unsubscribe functionality
+- Unify blog posting and newsletter sending
+  - When publishing a blog post the release channels need to be selected via checkboxes:
+    - Release as blog post (checked by default)
+    - Release as newsletter <- in this case we should use a library that transforms markdown into proper HTML using the light theme of the frontend
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
 
