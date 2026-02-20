@@ -33,9 +33,9 @@ export async function ensureBinaryExists(
   const binaryExists = await fs.promises.access(binaryPath).then(() => true).catch(() => false);
   
   if (!binaryExists) {
-    await writeLog(logFileName, 'Binary not found, building spawn_test_server...', 'BACKEND');
+    writeLog(logFileName, 'Binary not found, building spawn_test_server...', 'BACKEND');
     await buildBinary(projectRoot, logFileName);
-    await writeLog(logFileName, 'Binary build successful', 'BACKEND');
+    writeLog(logFileName, 'Binary build successful', 'BACKEND');
   } else {
     writeLog(logFileName, 'Using existing binary', 'BACKEND');
   }
@@ -65,12 +65,12 @@ async function buildBinary(projectRoot: string, logFileName: string): Promise<vo
       if (code === 0) {
         resolve();
       } else {
-        await writeLog(logFileName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
+        writeLog(logFileName, `ERROR: Cargo build failed with code ${code}\n${buildOutput}`, 'BACKEND');
         reject(new Error(`Cargo build failed with code ${code}. See log file for details.`));
       }
     });
     cargoBuild.on('error', async (err) => {
-      await writeLog(logFileName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
+      writeLog(logFileName, `ERROR: Failed to start cargo build: ${err.message}`, 'BACKEND');
       reject(new Error(`Failed to start cargo build: ${err.message}`));
     });
   });

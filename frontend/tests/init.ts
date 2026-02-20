@@ -54,12 +54,12 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     // Parse server info from output
     const serverInfo = await parseServerInfo(monitor);
     
-    await writeLog(logFileName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
+    writeLog(logFileName, `Test server started: port=${serverInfo.port}, address=${serverInfo.address}, username=${serverInfo.username || 'N/A'}`, 'BACKEND');
 
     // Wait for backend to be ready
-    await writeLog(logFileName, 'Waiting for backend to be ready...', 'BACKEND');
+    writeLog(logFileName, 'Waiting for backend to be ready...', 'BACKEND');
     await waitForBackendReady(serverInfo.address, 30000);
-    await writeLog(logFileName, 'Backend is ready', 'BACKEND');
+    writeLog(logFileName, 'Backend is ready', 'BACKEND');
 
     return {
       port: serverInfo.port,
@@ -72,7 +72,7 @@ export async function spawnTestApp(testName: string): Promise<TestApp> {
     };
   } catch (error) {
     testServerProcess.kill();
-    await writeLog(logFileName, `ERROR: Backend server startup failed: ${error}`, 'BACKEND');
+      writeLog(logFileName, `ERROR: Backend server startup failed: ${error}`, 'BACKEND');
     throw error;
   }
 }
@@ -118,7 +118,7 @@ export async function stopTestApp(app: TestApp): Promise<void> {
       await sleep(TIMEOUTS.DELAY_BACKEND_CLEANUP);
     } catch (error: any) {
       // Ignore errors during cleanup - process might already be dead
-      await writeLog('cleanup', `Error during backend cleanup: ${error?.message || error}`, 'TEST');
+      writeLog('cleanup', `Error during backend cleanup: ${error?.message || error}`, 'TEST');
     }
   }
 }

@@ -8,6 +8,8 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
+import { findFirstErrorMessage } from '../utils/errors'
+import { centeredFlex } from '../styles'
 
 interface UnsubscribeInfo {
   email: string
@@ -75,73 +77,78 @@ function UnsubscribeConfirm() {
     navigate('/')
   }
 
-  const errorMessage = (error as Error | null)?.message || (unsubscribeMutation.error as Error | null)?.message
+  const errorMessage = findFirstErrorMessage([error, unsubscribeMutation.error])
+
+  function renderContent() {
+    if (isLoading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+          <CircularProgress />
+        </Box>
+      )
+    }
+
+    if (errorMessage && !unsubscribeMutation.isSuccess) {
+      return (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {errorMessage}
+        </Alert>
+      )
+    }
+
+    if (unsubscribeMutation.isSuccess) {
+      return (
+        <>
+          <Alert severity="success" sx={{ mt: 2 }}>
+            You have been successfully unsubscribed from our newsletter.
+          </Alert>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <Button variant="contained" onClick={() => navigate('/')}>
+              Return to Home
+            </Button>
+          </Box>
+        </>
+      )
+    }
+
+    if (data?.email) {
+      return (
+        <>
+          <Typography variant="body1" sx={{ mt: 2, mb: 3 }}>
+            Are you sure you want to unsubscribe <strong>{data.email}</strong> from
+            our newsletter?
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+            <Button
+              variant="outlined"
+              onClick={handleCancel}
+              disabled={unsubscribeMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleConfirmUnsubscribe}
+              disabled={unsubscribeMutation.isPending}
+            >
+              {unsubscribeMutation.isPending ? 'Unsubscribing...' : 'Confirm Unsubscribe'}
+            </Button>
+          </Box>
+        </>
+      )
+    }
+
+    return null
+  }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '60vh',
-      }}
-    >
+    <Box sx={centeredFlex}>
       <Paper sx={{ p: 4, maxWidth: 600, width: '100%' }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Unsubscribe from Newsletter
         </Typography>
-
-        {isLoading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
-        )}
-
-        {errorMessage && !isLoading && !unsubscribeMutation.isSuccess && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {errorMessage}
-          </Alert>
-        )}
-
-        {unsubscribeMutation.isSuccess && (
-          <>
-            <Alert severity="success" sx={{ mt: 2 }}>
-              You have been successfully unsubscribed from our newsletter.
-            </Alert>
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
-              <Button variant="contained" onClick={() => navigate('/')}>
-                Return to Home
-              </Button>
-            </Box>
-          </>
-        )}
-
-        {!isLoading && !error && !unsubscribeMutation.isSuccess && data?.email && (
-          <>
-            <Typography variant="body1" sx={{ mt: 2, mb: 3 }}>
-              Are you sure you want to unsubscribe <strong>{data.email}</strong> from
-              our newsletter?
-            </Typography>
-
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-              <Button
-                variant="outlined"
-                onClick={handleCancel}
-                disabled={unsubscribeMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                color="error"
-                onClick={handleConfirmUnsubscribe}
-                disabled={unsubscribeMutation.isPending}
-              >
-                {unsubscribeMutation.isPending ? 'Unsubscribing...' : 'Confirm Unsubscribe'}
-              </Button>
-            </Box>
-          </>
-        )}
+        {renderContent()}
       </Paper>
     </Box>
   )

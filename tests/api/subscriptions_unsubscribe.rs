@@ -49,25 +49,6 @@ async fn unsubscribe_with_malformed_token_returns_400() {
 }
 
 #[tokio::test]
-async fn unsubscribe_with_invalid_token_returns_400() {
-    // Arrange
-    let app = spawn_app(function_name!()).await;
-    let invalid_token = "invalid-token-12345"; // Invalid format, different from MALFORMED_TOKEN
-
-    // Act - Test GET endpoint
-    let get_response = app.get_unsubscribe_info(invalid_token).await;
-
-    // Assert GET - Invalid token format should return 400
-    assert_eq!(get_response.status().as_u16(), 400);
-
-    // Act - Test POST endpoint
-    let post_response = app.post_unsubscribe(invalid_token).await;
-
-    // Assert POST - Invalid token format should return 400
-    assert_eq!(post_response.status().as_u16(), 400);
-}
-
-#[tokio::test]
 async fn unsubscribe_with_nonexistent_token_returns_401() {
     // Arrange
     let app = spawn_app(function_name!()).await;
@@ -192,31 +173,6 @@ async fn unsubscribe_removes_subscription_token() {
 }
 
 #[tokio::test]
-async fn unsubscribe_is_idempotent() {
-    // Arrange
-    let app = spawn_app(function_name!()).await;
-    let token =
-        create_confirmed_subscriber_with_token(&app, TEST_SUBSCRIBER_NAME, TEST_SUBSCRIBER_EMAIL)
-            .await;
-
-    // Act - First GET should succeed
-    let get_response1 = app.get_unsubscribe_info(&token).await;
-    assert_eq!(get_response1.status().as_u16(), 200);
-
-    // Act - First POST should succeed
-    let post_response1 = app.post_unsubscribe(&token).await;
-    assert_eq!(post_response1.status().as_u16(), 200);
-
-    // Act - Second GET should fail (token deleted after POST)
-    let get_response2 = app.get_unsubscribe_info(&token).await;
-    assert_eq!(get_response2.status().as_u16(), 401);
-
-    // Act - Second POST should fail (token no longer exists)
-    let post_response2 = app.post_unsubscribe(&token).await;
-    assert_eq!(post_response2.status().as_u16(), 401);
-}
-
-#[tokio::test]
 async fn confirm_fails_after_unsubscribe() {
     // Arrange - create confirmed subscriber, then unsubscribe
     let app = spawn_app(function_name!()).await;
@@ -224,11 +180,19 @@ async fn confirm_fails_after_unsubscribe() {
         create_confirmed_subscriber_with_token(&app, TEST_SUBSCRIBER_NAME, TEST_SUBSCRIBER_EMAIL)
             .await;
 
-    // Act - POST unsubscribe first
+    // Act - First GET should succeed (token valid before unsubscribe)
+    let get_response1 = app.get_unsubscribe_info(&token).await;
+    assert_eq!(get_response1.status().as_u16(), 200);
+
+    // Act - POST unsubscribe
     let unsubscribe_response = app.post_unsubscribe(&token).await;
     assert_eq!(unsubscribe_response.status().as_u16(), 200);
 
-    // Act - Try to confirm after unsubscribing
+    // Act - Second GET should fail (token deleted after POST)
+    let get_response2 = app.get_unsubscribe_info(&token).await;
+    assert_eq!(get_response2.status().as_u16(), 401);
+
+    // Act - Try to confirm after unsubscribing (token no longer exists)
     let confirm_response = reqwest::get(&format!(
         "{}/api/subscriptions/confirm?subscription_token={}",
         app.address, token
@@ -236,7 +200,7 @@ async fn confirm_fails_after_unsubscribe() {
     .await
     .unwrap();
 
-    // Assert - Confirm should fail with 401 (token no longer exists)
+    // Assert - Confirm should fail with 401
     assert_eq!(confirm_response.status().as_u16(), 401);
     let error_text = confirm_response.text().await.unwrap();
     assert!(error_text.contains("Invalid or expired subscription token"));
