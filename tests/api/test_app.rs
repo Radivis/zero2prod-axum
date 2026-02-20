@@ -88,7 +88,7 @@ impl TestApp {
     pub async fn dispatch_all_pending_emails(&self) {
         loop {
             if let ExecutionOutcome::EmptyQueue =
-                try_execute_task(&self.db_connection_pool, &self.email_client)
+                try_execute_task(&self.db_connection_pool, &self.email_client, &self.address)
                     .await
                     .unwrap()
             {
@@ -168,6 +168,27 @@ impl TestApp {
         self.api_client
             .post(format!("{}/api/subscriptions", &self.address))
             .json(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub fn get_unsubscribe_url(&self, subscription_token: &str) -> String {
+        format!(
+            "{}/api/subscriptions/unsubscribe?subscription_token={}",
+            self.address, subscription_token
+        )
+    }
+
+    pub async fn get_unsubscribe_info(&self, subscription_token: &str) -> reqwest::Response {
+        reqwest::get(self.get_unsubscribe_url(subscription_token))
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_unsubscribe(&self, subscription_token: &str) -> reqwest::Response {
+        self.api_client
+            .post(self.get_unsubscribe_url(subscription_token))
             .send()
             .await
             .expect("Failed to execute request.")

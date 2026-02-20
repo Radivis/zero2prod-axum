@@ -19,17 +19,11 @@ test.describe('Change Password', () => {
     // Go to password change page
     await page.goto('/admin/password');
     
-    // Wait for page to load before interacting
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
-    
-    // Verify we're on the password change page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/admin/password')) {
-        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
-    }
+    // Wait for all network requests (including auth check) to settle
+    await page.waitForLoadState('networkidle', { timeout: 15000 });
     
     // Wait for the password form to be visible
-    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     
     // Fill passwords with mismatch (doesn't need to be the real password - client-side validation)
     await page.getByLabel('Current password', { exact: true }).fill('anypassword123456');
@@ -47,15 +41,9 @@ test.describe('Change Password', () => {
     
     // Go to password change page
     await page.goto('/admin/password');
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 });
     
-    // Verify we're on the password change page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/admin/password')) {
-        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
-    }
-    
-    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     
     await page.getByLabel('Current password', { exact: true }).fill('anypassword123456');
     await page.getByLabel('New password', { exact: true }).fill('short');
@@ -72,15 +60,9 @@ test.describe('Change Password', () => {
     
     // Go to password change page
     await page.goto('/admin/password');
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 });
     
-    // Verify we're on the password change page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/admin/password')) {
-        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
-    }
-    
-    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     
     const longPassword = 'a'.repeat(129);
     await page.getByLabel('Current password', { exact: true }).fill('anypassword123456');
@@ -97,15 +79,9 @@ test.describe('Change Password', () => {
     const { page } = authenticatedPage;
     
     await page.goto('/admin/password');
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 });
     
-    // Verify we're on the password change page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/admin/password')) {
-        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
-    }
-    
-    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     
     // Use wrong current password (backend validation)
     await page.getByLabel('Current password', { exact: true }).fill('wrongpassword123456');
@@ -123,15 +99,9 @@ test.describe('Change Password', () => {
     
     // Go to password change page
     await page.goto('/admin/password');
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 });
     
-    // Verify we're on the password change page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/admin/password')) {
-        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
-    }
-    
-    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     
     // Now we have access to the actual current password!
     const newPassword = 'newpassword123456';

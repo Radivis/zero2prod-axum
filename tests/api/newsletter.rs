@@ -18,6 +18,24 @@ fn when_sending_an_email() -> MockBuilder {
 const NEWSLETTER_CONFIRMATION_MESSAGE: &str =
     "The newsletter issue has been accepted - emails will go out shortly.";
 
+fn default_newsletter_request_body() -> serde_json::Value {
+    serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string()
+    })
+}
+
+fn newsletter_request_body_with_idempotency_key(idempotency_key: &str) -> serde_json::Value {
+    serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": idempotency_key
+    })
+}
+
 #[tokio::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Arrange
@@ -35,12 +53,7 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Use the fact that there are no confirmed subscribers at all at this stage!
     let response = container
         .app
-        .post_newsletters(&serde_json::json!({
-            "title": "Newsletter title",
-            "text_content": "Newsletter body as plain text",
-            "html_content": "<p>Newsletter body as HTML</p>",
-            "idempotency_key": uuid::Uuid::new_v4().to_string()
-        }))
+        .post_newsletters(&default_newsletter_request_body())
         .await;
 
     // Assert - Should return 200 JSON success
@@ -71,12 +84,7 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // Act
     let response = container
         .app
-        .post_newsletters(&serde_json::json!({
-            "title": "Newsletter title",
-            "text_content": "Newsletter body as plain text",
-            "html_content": "<p>Newsletter body as HTML</p>",
-            "idempotency_key": uuid::Uuid::new_v4().to_string()
-        }))
+        .post_newsletters(&default_newsletter_request_body())
         .await;
 
     // Assert - Should return 200 JSON success
@@ -185,12 +193,7 @@ async fn newsletter_creation_is_idempotent() {
     let _ = mount_mock_email_server(&container.app.email_server, Some(times)).await;
 
     // Act - Part 1 - Submit newsletter form
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "text_content": "Newsletter body as plain text",
-        "html_content": "<p>Newsletter body as HTML</p>",
-        "idempotency_key": uuid::Uuid::new_v4().to_string()
-    });
+    let newsletter_request_body = default_newsletter_request_body();
     let response = container
         .app
         .post_newsletters(&newsletter_request_body)
@@ -238,12 +241,7 @@ async fn concurrent_form_submission_is_handled_gracefully() {
         .await;
 
     // Act - Submit two newsletter forms concurrently
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "text_content": "Newsletter body as plain text",
-        "html_content": "<p>Newsletter body as HTML</p>",
-        "idempotency_key": uuid::Uuid::new_v4().to_string()
-    });
+    let newsletter_request_body = default_newsletter_request_body();
     let response1 = container.app.post_newsletters(&newsletter_request_body);
     let response2 = container.app.post_newsletters(&newsletter_request_body);
     let (response1, response2) = tokio::join!(response1, response2);
@@ -272,12 +270,7 @@ async fn newsletter_are_sent_again_after_idempotency_key_expiry() {
 
     // Act - Submit two newsletter forms with a time difference > 24 h
     let idempotency_key = uuid::Uuid::new_v4().to_string();
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "text_content": "Newsletter body as plain text",
-        "html_content": "<p>Newsletter body as HTML</p>",
-        "idempotency_key": idempotency_key
-    });
+    let newsletter_request_body = newsletter_request_body_with_idempotency_key(&idempotency_key);
     let response1 = container
         .app
         .post_newsletters(&newsletter_request_body)
@@ -391,4 +384,69 @@ async fn create_confirmed_subscriber(app: &TestApp) {
         .unwrap()
         .error_for_status()
         .unwrap();
+}
+
+#[tokio::test]
+async fn newsletter_contains_unsubscribe_link() {
+    // Arrange
+    let container = spawn_app_container_with_user(function_name!())
+        .await
+        .login()
+        .await;
+    create_confirmed_subscriber(&container.app).await;
+
+    // Mount a fresh mock for the newsletter email (after confirmation email)
+    when_sending_an_email()
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&container.app.email_server)
+        .await;
+
+    // Act - Send newsletter
+    let response = container
+        .app
+        .post_newsletters(&default_newsletter_request_body())
+        .await;
+
+    assert_eq!(response.status().as_u16(), 200);
+
+    // Dispatch the emails
+    container.app.dispatch_all_pending_emails().await;
+
+    // Assert - Check that the email contains unsubscribe link
+    let email_requests = container
+        .app
+        .email_server
+        .received_requests()
+        .await
+        .unwrap();
+
+    // The last email should be the newsletter (previous ones are confirmation emails)
+    let newsletter_request = email_requests.last().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&newsletter_request.body).unwrap();
+
+    let html_body = body["HtmlBody"].as_str().unwrap();
+    let text_body = body["TextBody"].as_str().unwrap();
+
+    // Verify HTML contains unsubscribe link (without /api prefix for frontend SPA)
+    assert!(
+        html_body.contains("/subscriptions/unsubscribe?subscription_token="),
+        "HTML body should contain unsubscribe link: {}",
+        html_body
+    );
+    assert!(
+        html_body.contains("To unsubscribe"),
+        "HTML body should contain unsubscribe text"
+    );
+
+    // Verify plain text contains unsubscribe link (without /api prefix for frontend SPA)
+    assert!(
+        text_body.contains("/subscriptions/unsubscribe?subscription_token="),
+        "Text body should contain unsubscribe link: {}",
+        text_body
+    );
+    assert!(
+        text_body.contains("To unsubscribe"),
+        "Text body should contain unsubscribe text"
+    );
 }

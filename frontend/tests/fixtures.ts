@@ -4,6 +4,7 @@ import { ChildProcess } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { writeLog } from './helpers';
+import { fetchPostJson } from '../src/utils/api';
 import * as TIMEOUTS from './constants';
 import {
   spawnViteProcess,
@@ -66,7 +67,7 @@ async function retryUserCreation<T>(
       if (attempt < maxRetries) {
         // Exponential backoff: 100ms, 200ms, 400ms
         const delayMs = 100 * Math.pow(2, attempt - 1);
-        await writeLog('makeUser', `Attempt ${attempt} failed, retrying in ${delayMs}ms...`, 'TEST');
+        writeLog('makeUser', `Attempt ${attempt} failed, retrying in ${delayMs}ms...`, 'FIXTURE');
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
@@ -92,86 +93,82 @@ export async function makeUser(
   username: string,
   password: string
 ): Promise<MakeUserResult> {
+  const log = (msg: string) => writeLog('makeUser', msg, 'FIXTURE');
+
   return retryUserCreation(async () => {
     try {
-      const response = await fetch(`${backendAddress}/api/initial_password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        username, 
-        password,
-        password_confirmation: password  // Required by the endpoint
-      }),
-    });
-
-    if (!response.ok) {
-      const responseText = await response.text();
-      let errorData;
-      try {
-        errorData = JSON.parse(responseText);
-      } catch {
-        errorData = { error: responseText || 'Unknown error' };
-      }
-      
-      await writeLog('makeUser', `Failed to create user: ${response.status} ${response.statusText}`, 'TEST');
-      await writeLog('makeUser', `Response body: ${responseText}`, 'TEST');
-      
-      // Retry on server errors (5xx), but not client errors (4xx)
-      if (response.status >= 500) {
-        await writeLog('makeUser', `Server error (${response.status}), will retry`, 'TEST');
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
-      }
-      
-      return {
-        success: false,
-        error: {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData.error || errorData.message || responseText || 'Failed to create user',
+      const response = await fetchPostJson({
+        url: `${backendAddress}/api/initial_password`,
+        bodyObject: {
+          username,
+          password,
+          password_confirmation: password,
         },
-        username,
-        password,
-      };
-    }
+      });
 
-    const data = await response.json();
-    
-    // Verify the user is actually visible in the database before returning
-    // This prevents race conditions where the frontend checks for user existence
-    // before the database transaction is fully committed
-    const maxRetries = TIMEOUTS.USER_VERIFICATION_MAX_RETRIES;
-    const retryDelay = TIMEOUTS.USER_VERIFICATION_RETRY_DELAY;
-    let userVerified = false;
-    
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const existsResponse = await fetch(`${backendAddress}/api/users/exists`);
-        if (existsResponse.ok) {
-          const existsData = await existsResponse.json();
-          if (existsData.users_exist) {
-            userVerified = true;
-            break;
-          }
+      if (!response.ok) {
+        const responseText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          errorData = { error: responseText || 'Unknown error' };
         }
-      } catch (e) {
-        // Continue trying
+
+        log(`Failed to create user: ${response.status} ${response.statusText}`);
+        log(`Response body: ${responseText}`);
+
+        // Retry on server errors (5xx), but not client errors (4xx)
+        if (response.status >= 500) {
+          log(`Server error (${response.status}), will retry`);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+
+        return {
+          success: false,
+          error: {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData.error || errorData.message || responseText || 'Failed to create user',
+          },
+          username,
+          password,
+        };
       }
-      
-      if (i < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
+
+      const data = await response.json();
+
+      // Verify the user is actually visible in the database before returning
+      const maxRetries = TIMEOUTS.USER_VERIFICATION_MAX_RETRIES;
+      const retryDelay = TIMEOUTS.USER_VERIFICATION_RETRY_DELAY;
+      let userVerified = false;
+
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const existsResponse = await fetch(`${backendAddress}/api/users/exists`);
+          if (existsResponse.ok) {
+            const existsData = await existsResponse.json();
+            if (existsData.users_exist) {
+              userVerified = true;
+              break;
+            }
+          }
+        } catch (e) {
+          // Continue trying
+        }
+
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
-    }
-    
-    if (!userVerified) {
-      await writeLog('makeUser', `User created but not yet visible in existence check after ${maxRetries} retries`, 'TEST');
-    }
-    
-    // Small delay to ensure Redis session store is ready
-    // Helps prevent race conditions with high parallelism
-    await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAY_REDIS_READY));
-    
+
+      if (!userVerified) {
+        log(`User created but not yet visible in existence check after ${maxRetries} retries`);
+      }
+
+      // Small delay to ensure Redis session store is ready
+      await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAY_REDIS_READY));
+
       return {
         success: true,
         username,
@@ -179,12 +176,93 @@ export async function makeUser(
         userId: data.user_id,
       };
     } catch (error: any) {
-      await writeLog('makeUser', `Network error: ${error.message || error}`, 'TEST');
+      log(`Network error: ${error.message || error}`);
       
       // Throw to trigger retry for network errors
       throw error;
     }
   }, 3);  // Retry up to 3 times
+}
+
+/**
+ * Creates a confirmed newsletter subscriber via the REST API.
+ * 
+ * @param backendAddress - The backend server address
+ * @param email - The subscriber's email address
+ * @param name - The subscriber's name
+ * @returns Promise with the subscription token
+ */
+export async function makeConfirmedSubscriber(
+  backendAddress: string,
+  email: string,
+  name: string
+): Promise<string> {
+  const log = (msg: string) => writeLog('makeConfirmedSubscriber', msg, 'FIXTURE');
+
+  // 1. Create subscription
+  log(`Creating subscription for ${email}`);
+
+  const subscribeResponse = await fetchPostJson({
+    url: `${backendAddress}/api/subscriptions`,
+    bodyObject: { email, name },
+  });
+
+  if (!subscribeResponse.ok) {
+    const responseText = await subscribeResponse.text();
+    let errorData;
+    try {
+      errorData = JSON.parse(responseText);
+    } catch {
+      errorData = { error: responseText || 'Unknown error' };
+    }
+
+    log(`Failed to create subscription: ${subscribeResponse.status} ${subscribeResponse.statusText}`);
+    log(`Response body: ${responseText}`);
+
+    throw new Error(`Failed to create subscription: ${subscribeResponse.status} - ${errorData.error || responseText}`);
+  }
+
+  log(`Subscription created successfully`);
+
+  // 2. Get the token from the test endpoint
+  log(`Fetching token for ${email}`);
+  
+  const tokenResponse = await fetch(
+    `${backendAddress}/api/test/subscription-token?email=${encodeURIComponent(email)}`
+  );
+
+  if (!tokenResponse.ok) {
+    const responseText = await tokenResponse.text();
+    log(`Failed to get subscription token: ${tokenResponse.status} ${responseText}`);
+    throw new Error(`Failed to get subscription token: ${tokenResponse.status}`);
+  }
+
+  const tokenData = await tokenResponse.json();
+  const token = tokenData.token;
+
+  if (!token) {
+    log('No token returned from test endpoint');
+    throw new Error('No token returned from test endpoint');
+  }
+
+  log(`Token retrieved: ${token.substring(0, 8)}...`);
+
+  // 3. Confirm the subscription using the token
+  log(`Confirming subscription for ${email}`);
+  
+  const confirmResponse = await fetch(
+    `${backendAddress}/api/subscriptions/confirm?subscription_token=${token}`
+  );
+
+  if (!confirmResponse.ok) {
+    const responseText = await confirmResponse.text();
+    log(`Failed to confirm subscription: ${confirmResponse.status} ${responseText}`);
+    throw new Error(`Failed to confirm subscription: ${confirmResponse.status}`);
+  }
+
+  log(`Subscription confirmed successfully for ${email}`);
+
+  return token;
 }
 
 export async function login(
@@ -195,7 +273,7 @@ export async function login(
   page: Page
 ): Promise<void> {
     // Login via the browser
-    await writeLog(logFileName, 'Starting browser login...', 'TEST');
+    writeLog(logFileName, 'Starting browser login...', 'FIXTURE');
     await page.goto(`${frontendServer.url}/login`);
     
     // Wait for page to be fully loaded
@@ -206,14 +284,14 @@ export async function login(
     if (!currentUrl.includes('/login')) {
         throw new Error(`Expected to be on login page, but current URL is: ${currentUrl}`);
     }
-    await writeLog(logFileName, `Confirmed on login page: ${currentUrl}`, 'TEST');
+    writeLog(logFileName, `Confirmed on login page: ${currentUrl}`, 'FIXTURE');
     
-    await writeLog(logFileName, `Filling login form with username: ${username}`, 'TEST');
+    writeLog(logFileName, `Filling login form with username: ${username}`, 'FIXTURE');
     await page.getByLabel('Username').fill(username);
     await page.getByLabel('Password').fill(password);
     
     // Wait for login response and navigation
-    await writeLog(logFileName, 'Submitting login form...', 'TEST');
+    writeLog(logFileName, 'Submitting login form...', 'FIXTURE');
     const [response] = await Promise.all([
       page.waitForResponse(response => response.url().includes('/login') && response.request().method() === 'POST'),
       page.getByLabel('Login').click(),
@@ -230,10 +308,10 @@ export async function login(
         // Try to get the raw response text for debugging
         try {
           const responseText = await response.text();
-          await writeLog(logFileName, `Login failed - raw response body: ${responseText}`, 'TEST');
+          writeLog(logFileName, `Login failed - raw response body: ${responseText}`, 'FIXTURE');
           errorMessage += `: Cannot parse login response body (raw: ${responseText.substring(0, 200)})`;
         } catch {
-          await writeLog(logFileName, `Login failed - could not read response body at all`, 'TEST');
+          writeLog(logFileName, `Login failed - could not read response body at all`, 'FIXTURE');
           errorMessage += `: Cannot parse login response body (body unreadable)`;
         }
       }
@@ -241,10 +319,10 @@ export async function login(
     }
     
     const loginBody = await response.json();
-    writeLog(logFileName, `Login response: ${loginStatus} - ${JSON.stringify(loginBody)}`, 'TEST');
+    writeLog(logFileName, `Login response: ${loginStatus} - ${JSON.stringify(loginBody)}`, 'FIXTURE');
     
     // Wait for navigation to dashboard to complete
-    await writeLog(logFileName, 'Waiting for navigation to dashboard...', 'TEST');
+    writeLog(logFileName, 'Waiting for navigation to dashboard...', 'FIXTURE');
     await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
     
     // Verify we're on the dashboard page
@@ -259,7 +337,7 @@ export async function login(
       return page.waitForLoadState('domcontentloaded');
     });
     
-    await writeLog(logFileName, `Login complete, dashboard loaded at: ${dashboardUrl}`, 'TEST');
+    writeLog(logFileName, `Login complete, dashboard loaded at: ${dashboardUrl}`, 'FIXTURE');
 }
 
 // Frontend server type
@@ -291,21 +369,21 @@ export const test = base.extend<TestFixtures>({
     const dbTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
     // Log file name without e2e- prefix
     const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
-    await writeLog(logFileName, `Starting backend for test: ${testName}`, 'TEST');
+    writeLog(logFileName, `Starting backend for test: ${testName}`, 'FIXTURE');
     
     // Always spawn without a user - tests create users via makeUser() if needed
     let app: TestApp;
     try {
       app = await spawnTestApp(dbTestName);
     } catch (error) {
-      await writeLog(logFileName, `ERROR: Failed to spawn backend app: ${error}`, 'TEST');
+      writeLog(logFileName, `ERROR: Failed to spawn backend app: ${error}`, 'FIXTURE');
       throw error;
     }
     
     await use(app);
     
     // Cleanup
-    await writeLog(logFileName, 'Cleaning up backend app', 'TEST');
+    writeLog(logFileName, 'Cleaning up backend app', 'FIXTURE');
     await stopTestApp(app);
   },
 
@@ -321,7 +399,7 @@ export const test = base.extend<TestFixtures>({
       throw new Error(`Backend not ready before starting frontend: ${error}`);
     }
     
-    await writeLog(logFileName, `Starting Vite dev server with backend port ${app.port}`, 'FRONTEND');
+    writeLog(logFileName, `Starting Vite dev server with backend port ${app.port}`, 'FRONTEND');
     
     // Spawn Vite process
     const viteProcess = spawnViteProcess(app.port);
@@ -369,24 +447,24 @@ export const test = base.extend<TestFixtures>({
     try {
       await makeUser(backendApp.address, username, password);
     } catch (error) {
-      await writeLog(logFileName, `ERROR: Failed to create user: ${error}`, 'TEST');
+      writeLog(logFileName, `ERROR: Failed to create user: ${error}`, 'FIXTURE');
       await context.close();
       throw error;
     }
     
-    await writeLog(logFileName, `User created successfully: ${username}`, 'TEST');
+    writeLog(logFileName, `User created successfully: ${username}`, 'FIXTURE');
 
     // Login via the browser
     try {
       await login(username, password, logFileName, frontendServer, page);
     } catch (error) {
-      await writeLog(logFileName, `ERROR: Failed to login: ${error}`, 'TEST');
+      writeLog(logFileName, `ERROR: Failed to login: ${error}`, 'FIXTURE');
       await context.close();
       throw error;
     }
     
     // Wait for successful login (redirect to dashboard)
-    await writeLog(logFileName, 'Waiting for redirect to dashboard...', 'TEST');
+    writeLog(logFileName, 'Waiting for redirect to dashboard...', 'FIXTURE');
     await page.waitForURL(/\/admin\/dashboard/, { timeout: 10000 });
     
     // Verify we're on the dashboard page
@@ -397,7 +475,7 @@ export const test = base.extend<TestFixtures>({
     
     // Wait for dashboard to be fully loaded before starting tests
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
-    await writeLog(logFileName, `Dashboard loaded at ${dashboardUrl}, ready for test`, 'TEST');
+    writeLog(logFileName, `Dashboard loaded at ${dashboardUrl}, ready for test`, 'FIXTURE');
 
     // Pass page along with credentials so tests can use them
     await use({ page, username, password });

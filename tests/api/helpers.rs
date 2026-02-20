@@ -200,3 +200,37 @@ pub async fn create_blog_post(
 
     post_id
 }
+
+/// Helper function to create a confirmed subscriber and return their unsubscribe token
+pub async fn create_confirmed_subscriber_with_token(
+    app: &crate::test_app::TestApp,
+    name: &str,
+    email: &str,
+) -> String {
+    let body = serde_json::json!({
+        "name": name,
+        "email": email
+    });
+
+    let _ = mount_mock_email_server(&app.email_server, None).await;
+
+    // Create subscription
+    app.post_subscriptions(&body).await;
+
+    // Get confirmation link from email
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+    let confirmation_links = app.get_confirmation_links(email_request);
+
+    // Extract token
+    let token = confirmation_links
+        .html
+        .query_pairs()
+        .find(|(key, _)| key == "subscription_token")
+        .map(|(_, value)| value.to_string())
+        .unwrap();
+
+    // Confirm subscription
+    reqwest::get(confirmation_links.html).await.unwrap();
+
+    token
+}

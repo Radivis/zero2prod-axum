@@ -180,6 +180,45 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
 }
 
 #[tokio::test]
+#[tracing::instrument(name = "subscribe_sends_two_confirmation_emails_when_subscribing_twice")]
+async fn subscribe_sends_two_confirmation_emails_when_subscribing_twice() {
+    // Arrange
+    let test_app = spawn_app(function_name!()).await;
+    tracing::debug!(
+        "test_app started with email_server: {:?}",
+        &test_app.email_server
+    );
+    let body = serde_json::json!({
+        "name": "le guin",
+        "email": "ursula_le_guin@gmail.com"
+    });
+    // Don't expect the number of requests here. This is checked in the assertion below.
+    let _ = mount_mock_email_server(&test_app.email_server, None).await;
+
+    // Act
+    test_app.post_subscriptions(&body).await;
+    test_app.post_subscriptions(&body).await;
+
+    // Assert
+    // Get all intercepted requests
+    let email_requests = test_app.email_server.received_requests().await.unwrap();
+    assert_eq!(
+        email_requests.len(),
+        2,
+        "Expected 2 email requests, got {}",
+        email_requests.len()
+    );
+    // The two links should be identical
+    let confirmation_links1 = test_app.get_confirmation_links(&email_requests[0]);
+    let confirmation_links2 = test_app.get_confirmation_links(&email_requests[1]);
+    assert_eq!(confirmation_links1.html, confirmation_links2.html);
+    assert_eq!(
+        confirmation_links1.plain_text,
+        confirmation_links2.plain_text
+    );
+}
+
+#[tokio::test]
 async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     // Arrange
     let app = spawn_app(function_name!()).await;

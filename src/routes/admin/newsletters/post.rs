@@ -63,8 +63,9 @@ async fn get_confirmed_subscribers(
         r#"
         SELECT email
         FROM subscriptions
-        WHERE status = 'confirmed'
+        WHERE status = $1
         "#,
+        crate::routes::constants::SUBSCRIPTION_STATUS_CONFIRMED,
     )
     .fetch_all(db)
     .await?
@@ -119,9 +120,10 @@ async fn enqueue_delivery_tasks(
         )
         SELECT $1, email
         FROM subscriptions
-        WHERE status = 'confirmed'
+        WHERE status = $2
         "#,
         newsletter_issue_id,
+        crate::routes::constants::SUBSCRIPTION_STATUS_CONFIRMED,
     );
     transaction.execute(query).await?;
     Ok(())

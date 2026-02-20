@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const sleep = promisify(setTimeout);
 
 // Source type for structured logging
-export type LogSource = 'TEST' | 'FRONTEND' | 'BACKEND';
+export type LogSource = 'TEST' | 'FIXTURE' | 'FRONTEND' | 'BACKEND';
 
 // Helper to write to log file (fire-and-forget to avoid blocking)
 export function writeLog(testName: string, message: string, source: LogSource = 'TEST') {

@@ -19,8 +19,9 @@ use crate::routes::admin::{
 use crate::routes::blog::{get_post_by_id, get_published_posts};
 use crate::routes::constants::ERROR_AUTHENTICATION_REQUIRED;
 use crate::routes::{
-    auth_check_endpoint, change_password, check_users_exist_endpoint, confirm,
-    create_initial_password, health_check, log_out, login, publish_newsletter, subscribe,
+    auth_check_endpoint, change_password, check_users_exist_endpoint, confirm, confirm_unsubscribe,
+    create_initial_password, get_unsubscribe_info, health_check, log_out, login,
+    publish_newsletter, subscribe,
 };
 use axum::extract::FromRequestParts;
 use axum::extract::Request;
@@ -129,7 +130,9 @@ impl Application {
                 crate::routes::users::check_exists::check_users_exist_endpoint,
                 // Subscriptions
                 crate::routes::subscribe,
-                crate::routes::confirm,
+                crate::routes::subscriptions_confirm::confirm,
+                crate::routes::subscriptions_unsubscribe::get_unsubscribe_info,
+                crate::routes::subscriptions_unsubscribe::confirm_unsubscribe,
                 // Public blog
                 crate::routes::blog::get_published_posts,
                 crate::routes::blog::get_post_by_id,
@@ -156,6 +159,14 @@ impl Application {
         struct ApiDoc;
 
         // Build API router first
+        #[cfg(any(test, feature = "e2e-tests"))]
+        let test_routes = Router::new().route(
+            "/test/subscription-token",
+            get(crate::routes::test_helpers::get_subscription_token_for_email),
+        );
+        #[cfg(not(any(test, feature = "e2e-tests")))]
+        let test_routes = Router::new();
+
         let api_router = Router::new()
             // Auth & users (no auth required)
             .route("/users/exists", get(check_users_exist_endpoint))
@@ -165,6 +176,11 @@ impl Application {
             // Subscriptions (no auth required)
             .route("/subscriptions", post(subscribe))
             .route("/subscriptions/confirm", get(confirm))
+            .route(
+                "/subscriptions/unsubscribe",
+                get(get_unsubscribe_info).post(confirm_unsubscribe),
+            )
+            .merge(test_routes)
             // Blog - public endpoints (no auth required)
             .route("/blog/posts", get(get_published_posts))
             .route("/blog/posts/{id}", get(get_post_by_id))
@@ -188,6 +204,11 @@ impl Application {
             .route("/health_check", get(health_check))
             // Legacy subscription confirmation route (for email links - backwards compatible)
             .route("/subscriptions/confirm", get(confirm))
+            // Legacy subscription unsubscribe route (for email links - backwards compatible)
+            .route(
+                "/subscriptions/unsubscribe",
+                get(get_unsubscribe_info).post(confirm_unsubscribe),
+            )
             // Serve OpenAPI spec as JSON at /api/openapi.json
             .route(
                 "/api/openapi.json",

@@ -131,13 +131,13 @@ export async function waitForFrontendAccessible(
   logFileName: string,
   maxWait: number = 12000
 ): Promise<void> {
-  await writeLog(logFileName, `Checking frontend accessibility at ${frontendUrl}`, 'TEST');
+      writeLog(logFileName, `Checking frontend accessibility at ${frontendUrl}`, 'TEST');
   
   const startTime = Date.now();
   while (Date.now() - startTime < maxWait) {
     try {
       await fetch(frontendUrl);
-      await writeLog(logFileName, `Frontend server accessible at ${frontendUrl}`, 'TEST');
+      writeLog(logFileName, `Frontend server accessible at ${frontendUrl}`, 'TEST');
       return;
     } catch (error) {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -151,7 +151,7 @@ export async function waitForFrontendAccessible(
  * Kill Vite process and all its children
  */
 export async function killViteProcess(viteProcess: ChildProcess, logFileName: string): Promise<void> {
-  await writeLog(logFileName, 'Stopping Vite dev server', 'FRONTEND');
+      writeLog(logFileName, 'Stopping Vite dev server', 'FRONTEND');
 
   const killViteForcefully = async () => {
     viteProcess.kill('SIGTERM');
