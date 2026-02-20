@@ -1,6 +1,7 @@
 //! Shared types and utilities for subscription token-based operations.
 //! Used by both confirm and unsubscribe flows.
 
+use crate::routes::constants::ERROR_SOMETHING_WENT_WRONG;
 use crate::telemetry::error_chain_fmt;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -30,12 +31,18 @@ impl std::fmt::Debug for TokenError {
 
 impl IntoResponse for TokenError {
     fn into_response(self) -> axum::response::Response {
-        let status = match self {
-            TokenError::InvalidTokenFormat => StatusCode::BAD_REQUEST,
-            TokenError::InvalidToken => StatusCode::UNAUTHORIZED,
-            TokenError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        let (status, body) = match self {
+            TokenError::InvalidTokenFormat => (StatusCode::BAD_REQUEST, self.to_string()),
+            TokenError::InvalidToken => (StatusCode::UNAUTHORIZED, self.to_string()),
+            TokenError::UnexpectedError(_) => {
+                // Use generic message to avoid leaking internal error details
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ERROR_SOMETHING_WENT_WRONG.to_string(),
+                )
+            }
         };
-        (status, self.to_string()).into_response()
+        (status, body).into_response()
     }
 }
 
