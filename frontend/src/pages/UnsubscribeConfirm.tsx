@@ -33,7 +33,7 @@ function UnsubscribeConfirm() {
       )
 
       if (!response.ok) {
-        if (response.status === 401) {
+        if (response.status === 400 || response.status === 401) {
           throw new Error('Invalid or expired subscription token')
         }
         throw new Error('Failed to verify subscription token')
@@ -59,7 +59,7 @@ function UnsubscribeConfirm() {
       )
 
       if (!response.ok) {
-        if (response.status === 401) {
+        if (response.status === 400 || response.status === 401) {
           throw new Error('Invalid or expired subscription token')
         }
         throw new Error('Failed to unsubscribe. Please try again.')
