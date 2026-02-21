@@ -1,11 +1,14 @@
 import { createTheme, Theme } from '@mui/material/styles'
 
 // Shared accent - orange used in both themes
-const ACCENT_ORANGE = '#FF6B35'
+const ACCENT_ORANGE = 'hsl(14, 100%, 60%)'
 
-// Light theme - indigo and orange for consistency with dark theme
-const LIGHT_INDIGO_BG = '#e8eaf6' // Light indigo (Material indigo 50)
-const LIGHT_INDIGO_TEXT = '#3949ab' // Dark indigo for contrast on light bg
+// Light theme colors - purple-blue family with high lightness
+const LIGHT_BG_DEFAULT = 'hsl(255, 75%, 80%)'
+const LIGHT_BG_PAPER = 'hsl(255, 50%, 90%)'
+const LIGHT_APPBAR_BG = 'hsl(255, 60%, 85%)'
+const LIGHT_APPBAR_TEXT = 'hsl(255, 60%, 30%)'
+const LIGHT_SECONDARY = 'hsl(255, 50%, 55%)'
 
 export const lightTheme: Theme = createTheme({
   palette: {
@@ -14,43 +17,43 @@ export const lightTheme: Theme = createTheme({
       main: ACCENT_ORANGE,
     },
     secondary: {
-      main: '#5c6bc0', // Indigo accent
+      main: LIGHT_SECONDARY,
     },
     background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
+      default: LIGHT_BG_DEFAULT,
+      paper: LIGHT_BG_PAPER,
     },
   },
   components: {
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: LIGHT_INDIGO_BG,
-          color: LIGHT_INDIGO_TEXT,
+          backgroundColor: LIGHT_APPBAR_BG,
+          color: LIGHT_APPBAR_TEXT,
         },
       },
     },
   },
 })
 
-// Dark theme - indigo and orange for consistency with light theme
+// Dark theme colors - purple-blue family with low lightness
 const DARK_PRIMARY = ACCENT_ORANGE
-const DARK_SECONDARY = '#444d59' // Greyish indigo
-const DARK_BG_DEFAULT = '#343d49' // Greyish indigo background
-const DARK_BG_PAPER = '#424b58' // Slightly lighter for paper
-const DARK_TEXT_PRIMARY = '#FFFFFF'
-const DARK_TEXT_SECONDARY = '#E5E7EB'
+const DARK_BG_DEFAULT = 'hsl(255, 75%, 20%)'
+const DARK_BG_PAPER = 'hsl(255, 50%, 25%)'
+const DARK_SECONDARY = 'hsl(255, 30%, 35%)'
+const DARK_TEXT_PRIMARY = 'hsl(0, 0%, 100%)'
+const DARK_TEXT_SECONDARY = 'hsl(0, 0%, 90%)'
 
 // Exported for editor consistency - editor uses same palette as main theme
 export const DARK_THEME_EDITOR = {
   bg: DARK_BG_DEFAULT,
   paper: DARK_BG_PAPER,
   toolbar: DARK_BG_PAPER,
-  border: 'rgba(255, 255, 255, 0.12)',
-  text: '#e5e7eb',
-  buttonHover: '#565f6b',
-  buttonActive: '#5c6571',
-  link: '#90caf9',
+  border: 'hsla(0, 0%, 100%, 0.12)',
+  text: 'hsl(0, 0%, 90%)',
+  buttonHover: 'hsl(255, 30%, 40%)',
+  buttonActive: 'hsl(255, 30%, 45%)',
+  link: 'hsl(207, 90%, 77%)',
   blockquoteBorder: DARK_PRIMARY,
 } as const
 

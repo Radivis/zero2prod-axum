@@ -6,8 +6,7 @@ use crate::routes::utils::is_valid_uuid_token;
 use crate::startup::AppState;
 use anyhow::Context;
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Redirect};
 use uuid::Uuid;
 
 #[tracing::instrument(name = "Mark subscriber as confirmed", skip(subscriber_id, db))]
@@ -33,13 +32,14 @@ pub type Parameters = SubscriptionTokenParameters;
 ///
 /// Activates a subscription using the token received via email.
 /// This endpoint is called when a user clicks the confirmation link in their email.
+/// Redirects to the frontend's subscribed page on success.
 #[utoipa::path(
     get,
     path = "/api/subscriptions/confirm",
     tag = "subscriptions",
     params(Parameters),
     responses(
-        (status = 200, description = "Subscription confirmed successfully"),
+        (status = 303, description = "Subscription confirmed successfully, redirecting to /subscribed"),
         (status = 401, description = "Invalid or expired subscription token"),
         (status = 500, description = "Internal server error"),
     )
@@ -64,5 +64,5 @@ pub async fn confirm(
         .await
         .context("Failed to confirm subscriber")?;
 
-    Ok(StatusCode::OK)
+    Ok(Redirect::to("/subscribed"))
 }

@@ -53,13 +53,17 @@ Some improvements over the solutions from the book
 
 ## Roadmap
 
-- Unify blog posting and newsletter sending
-  - When publishing a blog post the release channels need to be selected via checkboxes:
+- Add static page
+- Unify blog posting, newsletter sending, and static page management (turns the app into a lightweight CMS)
+  - When publishing an article the release channels need to be selected via checkboxes:
     - Release as blog post (checked by default)
     - Release as newsletter <- in this case we should use a library that transforms markdown into proper HTML using the light theme of the frontend
+    - Publish as static page
+      - button_title
+      - position (int)
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
+- Integrate precise agentic workflow into the repo
 
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
-- Integrate precise agentic workflow into the repo
