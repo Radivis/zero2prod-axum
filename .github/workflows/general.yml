@@ -190,7 +190,7 @@ jobs:
       
       # Build test backend binary
       - name: Clean previous builds
-        run: cargo clean -p zero2prod --release
+        run: cargo clean -p zero2prod
       
       - name: Build spawn_test_server
         run: cargo build --bin spawn_test_server --features e2e-tests
