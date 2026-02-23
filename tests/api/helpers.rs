@@ -229,8 +229,25 @@ pub async fn create_confirmed_subscriber_with_token(
         .map(|(_, value)| value.to_string())
         .unwrap();
 
-    // Confirm subscription
-    reqwest::get(confirmation_links.html).await.unwrap();
+    // Confirm subscription - use api_client which does not follow redirects
+    let response = app
+        .api_client
+        .get(confirmation_links.html.as_str())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status().as_u16(),
+        303,
+        "Expected 303 redirect to /subscribed"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
+        Some("/subscribed")
+    );
 
     token
 }

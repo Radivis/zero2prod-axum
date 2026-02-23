@@ -379,11 +379,25 @@ async fn create_confirmed_subscriber(app: &TestApp) {
     // We can then reuse the same helper and just add
     // an extra step to actually call the confirmation link!
     let confirmation_link = create_unconfirmed_subscriber(app).await;
-    reqwest::get(confirmation_link.html)
+    // Use api_client which does not follow redirects (backend redirects to /subscribed)
+    let response = app
+        .api_client
+        .get(confirmation_link.html.as_str())
+        .send()
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    assert_eq!(
+        response.status().as_u16(),
+        303,
+        "Expected 303 redirect to /subscribed"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
+        Some("/subscribed")
+    );
 }
 
 #[tokio::test]
