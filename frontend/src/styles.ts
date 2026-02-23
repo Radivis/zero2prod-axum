@@ -9,3 +9,13 @@ export const centeredFlex: SxProps<Theme> = {
   alignItems: 'center',
   minHeight: '60vh',
 };
+
+/**
+ * Shared paragraph styles for body text - fontSize, lineHeight, textAlign.
+ * Override mb (margin-bottom) per usage.
+ */
+export const bodyParagraphSx: SxProps<Theme> = {
+  fontSize: '1.1rem',
+  lineHeight: 1.8,
+  textAlign: 'justify',
+};

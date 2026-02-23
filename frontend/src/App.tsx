@@ -25,7 +25,7 @@ function App() {
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/subscribed" element={<Subscribed />} />
+            <Route path={ROUTES.subscribed} element={<Subscribed />} />
             <Route path="/login" element={<Login />} />
             <Route path="/initial_password" element={<InitialPassword />} />
             <Route path="/subscriptions/unsubscribe" element={<UnsubscribeConfirm />} />

@@ -90,3 +90,13 @@ export const darkTheme: Theme = createTheme({
 export function getTheme(mode: 'light' | 'dark'): Theme {
   return mode === 'dark' ? darkTheme : lightTheme
 }
+
+// Home page gradient - uses same hue/saturation family as theme
+const LIGHT_GRADIENT_MID = 'hsl(255, 50%, 80%)'
+const DARK_GRADIENT_MID = 'hsl(255, 50%, 20%)'
+
+export function getHomePageGradient(mode: 'light' | 'dark'): string {
+  const startEnd = mode === 'light' ? LIGHT_BG_DEFAULT : DARK_BG_DEFAULT
+  const mid = mode === 'light' ? LIGHT_GRADIENT_MID : DARK_GRADIENT_MID
+  return `linear-gradient(90deg, ${startEnd} 0%, ${mid} 50%, ${startEnd} 100%)`
+}

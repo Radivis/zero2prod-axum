@@ -1,5 +1,6 @@
 use crate::helpers::{
-    ConfirmationLinks, assert_is_json_error, assert_json_response, mount_mock_email_server,
+    ConfirmationLinks, assert_is_json_error, assert_json_response,
+    assert_subscription_confirm_redirect, mount_mock_email_server,
 };
 use crate::macros::function_name_macro::function_name;
 use crate::test_app::{TestApp, spawn_app, spawn_app_container_with_user};
@@ -386,18 +387,7 @@ async fn create_confirmed_subscriber(app: &TestApp) {
         .send()
         .await
         .unwrap();
-    assert_eq!(
-        response.status().as_u16(),
-        303,
-        "Expected 303 redirect to /subscribed"
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok()),
-        Some("/subscribed")
-    );
+    assert_subscription_confirm_redirect(&response);
 }
 
 #[tokio::test]

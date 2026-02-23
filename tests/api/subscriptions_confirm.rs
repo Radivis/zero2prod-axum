@@ -1,4 +1,4 @@
-use crate::helpers::mount_mock_email_server;
+use crate::helpers::{assert_subscription_confirm_redirect, mount_mock_email_server};
 use crate::macros::function_name_macro::function_name;
 use crate::test_app::spawn_app;
 
@@ -72,14 +72,7 @@ async fn the_link_returned_by_subscribe_returns_a_303_redirect_if_called() {
         .await
         .unwrap();
     // Assert - 303 See Other redirect to /subscribed
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok()),
-        Some("/subscribed")
-    );
+    assert_subscription_confirm_redirect(&response);
 }
 
 #[tokio::test]
@@ -101,18 +94,7 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
         .send()
         .await
         .unwrap();
-    assert_eq!(
-        response.status().as_u16(),
-        303,
-        "Expected 303 redirect to /subscribed"
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok()),
-        Some("/subscribed")
-    );
+    assert_subscription_confirm_redirect(&response);
     // Assert
     let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(&app.db_connection_pool)

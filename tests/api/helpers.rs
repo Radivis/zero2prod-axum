@@ -136,6 +136,22 @@ pub async fn mount_mock_email_server(
     }
 }
 
+/// Asserts that a response is a 303 redirect to the subscription confirmation page
+pub fn assert_subscription_confirm_redirect(response: &reqwest::Response) {
+    assert_eq!(
+        response.status().as_u16(),
+        303,
+        "Expected 303 redirect to /subscribed"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
+        Some(zero2prod::routes::constants::SUBSCRIPTION_CONFIRMED_REDIRECT_PATH)
+    );
+}
+
 pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
     assert_eq!(response.status().as_u16(), expected_status);
     assert_eq!(
@@ -236,18 +252,7 @@ pub async fn create_confirmed_subscriber_with_token(
         .send()
         .await
         .unwrap();
-    assert_eq!(
-        response.status().as_u16(),
-        303,
-        "Expected 303 redirect to /subscribed"
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok()),
-        Some("/subscribed")
-    );
+    assert_subscription_confirm_redirect(&response);
 
     token
 }

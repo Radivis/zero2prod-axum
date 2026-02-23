@@ -1,4 +1,6 @@
-use crate::routes::constants::SUBSCRIPTION_STATUS_CONFIRMED;
+use crate::routes::constants::{
+    SUBSCRIPTION_CONFIRMED_REDIRECT_PATH, SUBSCRIPTION_STATUS_CONFIRMED,
+};
 use crate::routes::subscription_tokens::{
     SubscriptionTokenParameters, TokenError, get_subscriber_id_from_token,
 };
@@ -64,5 +66,5 @@ pub async fn confirm(
         .await
         .context("Failed to confirm subscriber")?;
 
-    Ok(Redirect::to("/subscribed"))
+    Ok(Redirect::to(SUBSCRIPTION_CONFIRMED_REDIRECT_PATH))
 }

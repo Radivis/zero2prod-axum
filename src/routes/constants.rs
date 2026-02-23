@@ -23,6 +23,9 @@ pub fn subscription_confirm_url(base_url: &str, subscription_token: &str) -> Str
     )
 }
 
+/// Frontend path to redirect to after successful subscription confirmation
+pub const SUBSCRIPTION_CONFIRMED_REDIRECT_PATH: &str = "/subscribed";
+
 /// Builds the unsubscribe URL for newsletter email footers
 pub fn unsubscribe_url(base_url: &str, subscription_token: &str) -> String {
     format!(

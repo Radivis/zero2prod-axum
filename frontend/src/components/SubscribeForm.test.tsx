@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../test-utils/test-utils'
-import SubscribeForm from './SubscribeForm'
+import SubscribeForm, {
+  SUBSCRIPTION_FORM_LEGEND,
+  SUBSCRIPTION_SUCCESS_MESSAGE,
+} from './SubscribeForm'
 
 describe('SubscribeForm', () => {
   beforeEach(() => {
@@ -12,9 +15,7 @@ describe('SubscribeForm', () => {
   it('renders the subscription form with legend and input fields', () => {
     render(<SubscribeForm />)
 
-    expect(
-      screen.getByText('Subscribe to the newsletter to receive updates on this project')
-    ).toBeInTheDocument()
+    expect(screen.getByText(SUBSCRIPTION_FORM_LEGEND)).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Subscribe' })).toBeInTheDocument()
@@ -81,9 +82,7 @@ describe('SubscribeForm', () => {
     await user.click(screen.getByRole('button', { name: 'Subscribe' }))
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Please check your email to confirm your subscription.')
-      ).toBeInTheDocument()
+      expect(screen.getByText(SUBSCRIPTION_SUCCESS_MESSAGE)).toBeInTheDocument()
     })
   })
 

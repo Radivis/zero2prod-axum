@@ -15,7 +15,7 @@ impl SubscriberEmailAddress {
         if s.validate_email() {
             Ok(Self(s))
         } else {
-            Err(format!("{} is not a valid subscriber email.", s))
+            Err("Email is invalid".to_string())
         }
     }
 }
