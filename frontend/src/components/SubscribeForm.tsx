@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/ThemeContext'
 
 import { Box, Typography, TextField, Button, CircularProgress } from '@mui/material'
 import MessageBanner from './MessageBanner'
+import { fetchPostJson } from '../utils/api'
 
 // Exported for tests
 export const SUBSCRIPTION_FORM_LEGEND = 'Subscribe to the newsletter to receive updates on this project'
@@ -26,13 +27,10 @@ function SubscribeForm() {
 
   const subscribeMutation = useMutation({
     mutationFn: async (data: { name: string; email: string }) => {
-      const response = await fetch('/api/subscriptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const response = await fetchPostJson({
+        url: '/api/subscriptions',
+        bodyObject: data,
+      });
 
       if (!response.ok) {
         const errorText = await response.text()
