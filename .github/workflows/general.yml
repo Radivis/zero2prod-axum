@@ -188,12 +188,12 @@ jobs:
       - name: Migrate database
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
       
-      # Build test backend binary
+      # Build test backend binary (release - must match backend-spawn-helpers.ts which expects target/release/)
       - name: Clean previous builds
         run: cargo clean -p zero2prod
       
       - name: Build spawn_test_server
-        run: cargo build --bin spawn_test_server --features e2e-tests
+        run: cargo build --bin spawn_test_server --features e2e-tests --release
       
       # Setup Node.js for frontend
       - name: Setup Node.js
