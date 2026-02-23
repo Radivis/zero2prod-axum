@@ -166,6 +166,9 @@ jobs:
       # Setup Rust for backend
       - name: Install the Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # Customize cache key to include e2e-tests feature
+          cache-key: e2e-tests
       
       - name: Install sqlx-cli
         run: cargo install sqlx-cli
@@ -186,6 +189,9 @@ jobs:
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
       
       # Build test backend binary
+      - name: Clean previous builds
+        run: cargo clean -p zero2prod --release
+      
       - name: Build spawn_test_server
         run: cargo build --bin spawn_test_server --features e2e-tests
       
