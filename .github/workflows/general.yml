@@ -187,7 +187,7 @@ jobs:
       
       # Build test backend binary
       - name: Build spawn_test_server
-        run: cargo build --bin spawn_test_server
+        run: cargo build --bin spawn_test_server --features e2e-tests
       
       # Setup Node.js for frontend
       - name: Setup Node.js
