@@ -87,7 +87,7 @@ jobs:
       - name: Run tests with nextest
         env:
           RUST_BACKTRACE: "1"
-        run: cargo nextest run --profile ci --no-fail-fast  # --no-fail-fast for full coverage
+        run: cargo nextest run --profile ci --no-fail-fast --features e2e-tests # --no-fail-fast for full coverage
 
       - name: Upload test results (on failure)
         if: failure()
