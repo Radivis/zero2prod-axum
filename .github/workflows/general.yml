@@ -167,8 +167,8 @@ jobs:
       - name: Install the Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          # Customize cache key to include e2e-tests feature
-          cache-key: e2e-tests
+          # Customize cache key to include e2e-tests feature and prevent using cache from builds without features
+          cache-key: release-e2e-tests-enabled
       
       - name: Install sqlx-cli
         run: cargo install sqlx-cli
@@ -189,13 +189,9 @@ jobs:
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
       
       # Build test backend binary (release - must match backend-spawn-helpers.ts which expects target/release/)
-      - name: Clean and build spawn_test_server
+      - name: Build spawn_test_server with e2e-tests feature
         run: |
-          # Remove any cached artifacts that might interfere
-          cargo clean --release -p zero2prod
-          rm -rf target/release/.fingerprint/zero2prod-*
-          # Build with e2e-tests feature (verbose to see what's being compiled)
-          cargo build --bin spawn_test_server --features e2e-tests --release --verbose 2>&1 | grep -E "(Compiling zero2prod|Fresh zero2prod|features=)" || true
+          # Build with e2e-tests feature
           cargo build --bin spawn_test_server --features e2e-tests --release
 
       - name: Verify spawn_test_server binary exists
