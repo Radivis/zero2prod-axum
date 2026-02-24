@@ -159,13 +159,14 @@ impl Application {
         struct ApiDoc;
 
         // Build API router first
-        #[cfg(any(test, feature = "e2e-tests"))]
-        let test_routes = Router::new().route(
-            "/test/subscription-token",
-            get(crate::routes::test_helpers::get_subscription_token_for_email),
-        );
-        #[cfg(not(any(test, feature = "e2e-tests")))]
-        let test_routes = Router::new();
+        // Temporarily removing cfg to debug - test route should ALWAYS be present
+        let test_routes = {
+            tracing::info!("Test routes being registered (DEBUG: cfg removed)");
+            Router::new().route(
+                "/test/subscription-token",
+                get(crate::routes::test_helpers::get_subscription_token_for_email),
+            )
+        };
 
         let api_router = Router::new()
             // Auth & users (no auth required)
