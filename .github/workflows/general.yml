@@ -196,6 +196,14 @@ jobs:
         run: |
           rm -f target/release/spawn_test_server
           cargo build --bin spawn_test_server --features e2e-tests --release
+
+      - name: Verify spawn_test_server has e2e-tests feature
+        run: |
+          ./target/release/spawn_test_server --help 2>&1 || true
+          if ./target/release/spawn_test_server 2>&1 | grep -q "requires the 'e2e-tests' feature"; then
+            echo "ERROR: Binary was built without e2e-tests feature"
+            exit 1
+          fi
       
       # Setup Node.js for frontend
       - name: Setup Node.js
