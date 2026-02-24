@@ -10,6 +10,13 @@ use zero2prod::test_support::spawn_app;
 #[cfg(feature = "e2e-tests")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Check for --check-features flag to verify build configuration
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "--check-features" {
+        println!("e2e-tests feature: ENABLED");
+        return Ok(());
+    }
+
     // Note: Tracing is initialized by helpers.rs
     // If TEST_LOG=1 is set in the environment, it will output to stdout
     // which will be captured by the Node.js process
@@ -62,6 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(not(feature = "e2e-tests"))]
 fn main() {
+    // Check for --check-features flag
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "--check-features" {
+        println!("e2e-tests feature: DISABLED");
+        std::process::exit(1);
+    }
+
     eprintln!("This binary requires the 'e2e-tests' feature to be enabled.");
     eprintln!("Build with: cargo build --bin spawn_test_server --features e2e-tests --release");
     std::process::exit(1);
