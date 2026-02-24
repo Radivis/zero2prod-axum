@@ -1,6 +1,10 @@
 //! Common test utilities shared between regular and e2e tests.
 //! This module is accessible in both tests/api and tests/api-e2e.
 
+// Allow unused code in test utilities - not all helpers are used by all test binaries
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 pub mod helpers;
 pub mod macros;
 pub mod test_app;
