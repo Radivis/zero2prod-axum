@@ -9,6 +9,8 @@ pub mod test_data;
 // Re-export commonly used items for convenience
 pub use helpers::*;
 pub use macros::function_name_macro::function_name;
+// TestAppContainerWithUser, TestUser may remain unused, but are still exported for convenience.
+#[allow(unused_imports)]
 pub use test_app::{
     TestApp, TestAppContainerWithUser, TestUser, spawn_app, spawn_app_container_with_user,
 };

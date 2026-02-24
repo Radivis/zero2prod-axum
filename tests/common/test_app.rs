@@ -194,6 +194,7 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
+    #[cfg(feature = "e2e-tests")]
     pub async fn get_test_token(&self, email: &str) -> reqwest::Response {
         self.api_client
             .get(format!("{}/api/test/subscription-token", self.address))
