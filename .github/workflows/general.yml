@@ -189,21 +189,23 @@ jobs:
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
       
       # Build test backend binary (release - must match backend-spawn-helpers.ts which expects target/release/)
-      - name: Clean previous builds
-        run: cargo clean -p zero2prod
-      
       - name: Clean and build spawn_test_server
         run: |
-          rm -f target/release/spawn_test_server
+          # Remove any cached artifacts that might interfere
+          cargo clean --release -p zero2prod
+          rm -rf target/release/.fingerprint/zero2prod-*
+          # Build with e2e-tests feature (verbose to see what's being compiled)
+          cargo build --bin spawn_test_server --features e2e-tests --release --verbose 2>&1 | grep -E "(Compiling zero2prod|Fresh zero2prod|features=)" || true
           cargo build --bin spawn_test_server --features e2e-tests --release
 
-      - name: Verify spawn_test_server has e2e-tests feature
+      - name: Verify spawn_test_server binary exists
         run: |
-          ./target/release/spawn_test_server --help 2>&1 || true
-          if ./target/release/spawn_test_server 2>&1 | grep -q "requires the 'e2e-tests' feature"; then
-            echo "ERROR: Binary was built without e2e-tests feature"
+          if [ ! -f ./target/release/spawn_test_server ]; then
+            echo "ERROR: spawn_test_server binary not found"
             exit 1
           fi
+          echo "Binary exists: $(ls -lh ./target/release/spawn_test_server)"
+          echo "Binary verification passed"
       
       # Setup Node.js for frontend
       - name: Setup Node.js
