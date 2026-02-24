@@ -192,8 +192,10 @@ jobs:
       - name: Clean previous builds
         run: cargo clean -p zero2prod
       
-      - name: Build spawn_test_server
-        run: cargo build --bin spawn_test_server --features e2e-tests --release
+      - name: Clean and build spawn_test_server
+        run: |
+          rm -f target/release/spawn_test_server
+          cargo build --bin spawn_test_server --features e2e-tests --release
       
       # Setup Node.js for frontend
       - name: Setup Node.js
