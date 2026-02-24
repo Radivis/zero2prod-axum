@@ -1,4 +1,4 @@
-use crate::helpers::{ConfirmationLinks, configure_database};
+use super::helpers::{ConfirmationLinks, configure_database};
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version, password_hash::SaltString};
 use linkify::LinkFinder;
 use sqlx::PgPool;
@@ -194,6 +194,15 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
+    pub async fn get_test_token(&self, email: &str) -> reqwest::Response {
+        self.api_client
+            .get(format!("{}/api/test/subscription-token", self.address))
+            .query(&[("email", email)])
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
     // Blog public endpoints
     pub async fn get_published_posts(&self) -> reqwest::Response {
         self.api_client
@@ -307,7 +316,7 @@ pub async fn spawn_app(test_name: impl AsRef<str>) -> TestApp {
     let test_name = test_name.as_ref();
     // The first time `initialize` is invoked the code in `TRACING` is executed.
     // All other invocations will instead skip execution.
-    LazyLock::force(&crate::helpers::TRACING);
+    LazyLock::force(&super::helpers::TRACING);
 
     // Launch a mock server to stand in for Postmark's API
     let email_server = MockServer::start().await;

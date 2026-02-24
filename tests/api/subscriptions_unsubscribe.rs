@@ -1,7 +1,7 @@
-use crate::helpers::create_confirmed_subscriber_with_token;
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::spawn_app;
-use crate::test_data::{
+use crate::common::create_confirmed_subscriber_with_token;
+use crate::common::function_name;
+use crate::common::spawn_app;
+use crate::common::{
     MALFORMED_TOKEN, NONEXISTENT_UUID_TOKEN, TEST_SUBSCRIBER_EMAIL, TEST_SUBSCRIBER_NAME,
 };
 

@@ -219,7 +219,7 @@ pub async fn create_blog_post(
 
 /// Helper function to create a confirmed subscriber and return their unsubscribe token
 pub async fn create_confirmed_subscriber_with_token(
-    app: &crate::test_app::TestApp,
+    app: &super::test_app::TestApp,
     name: &str,
     email: &str,
 ) -> String {
