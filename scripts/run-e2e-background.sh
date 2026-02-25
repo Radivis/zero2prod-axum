@@ -13,18 +13,21 @@ echo "🧪 Starting E2E tests in background..."
 echo "   Log file: $LOG_FILE"
 
 # Run tests in truly independent background process using nohup
+# Export variables so the subshell can access them
+export LOG_FILE STATUS_FILE
+
 nohup bash -c '
-    echo "════════════════════════════════════════════════════" > '"'$LOG_FILE'"'
-    echo "  🧪 E2E TESTS STARTED at $(date)" >> '"'$LOG_FILE'"'
-    echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
-    echo "" >> '"'$LOG_FILE'"'
+    echo "════════════════════════════════════════════════════" > "$LOG_FILE"
+    echo "  🧪 E2E TESTS STARTED at $(date)" >> "$LOG_FILE"
+    echo "════════════════════════════════════════════════════" >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
     
-    if npx playwright test --reporter=list >> '"'$LOG_FILE'"' 2>&1; then
-        echo "" >> '"'$LOG_FILE'"'
-        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
-        echo "  ✅ E2E TESTS PASSED at $(date)" >> '"'$LOG_FILE'"'
-        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
-        echo "PASSED" > '"'$STATUS_FILE'"'
+    if npx playwright test --reporter=list >> "$LOG_FILE" 2>&1; then
+        echo "" >> "$LOG_FILE"
+        echo "════════════════════════════════════════════════════" >> "$LOG_FILE"
+        echo "  ✅ E2E TESTS PASSED at $(date)" >> "$LOG_FILE"
+        echo "════════════════════════════════════════════════════" >> "$LOG_FILE"
+        echo "PASSED" > "$STATUS_FILE"
         
         # Send success notification
         if command -v notify-send &> /dev/null; then
@@ -32,11 +35,11 @@ nohup bash -c '
         fi
     else
         EXIT_CODE=$?
-        echo "" >> '"'$LOG_FILE'"'
-        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
-        echo "  ❌ E2E TESTS FAILED at $(date) (exit code: $EXIT_CODE)" >> '"'$LOG_FILE'"'
-        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
-        echo "FAILED:$EXIT_CODE" > '"'$STATUS_FILE'"'
+        echo "" >> "$LOG_FILE"
+        echo "════════════════════════════════════════════════════" >> "$LOG_FILE"
+        echo "  ❌ E2E TESTS FAILED at $(date) (exit code: $EXIT_CODE)" >> "$LOG_FILE"
+        echo "════════════════════════════════════════════════════" >> "$LOG_FILE"
+        echo "FAILED:$EXIT_CODE" > "$STATUS_FILE"
         
         # Send failure notification
         if command -v notify-send &> /dev/null; then
