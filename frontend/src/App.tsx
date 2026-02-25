@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Container } from '@mui/material'
 import Home from './pages/Home'
+import Subscribed from './pages/Subscribed'
 import Login from './pages/Login'
 import InitialPassword from './pages/InitialPassword'
 import AdminDashboard from './pages/AdminDashboard'
@@ -24,6 +25,7 @@ function App() {
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path={ROUTES.subscribed} element={<Subscribed />} />
             <Route path="/login" element={<Login />} />
             <Route path="/initial_password" element={<InitialPassword />} />
             <Route path="/subscriptions/unsubscribe" element={<UnsubscribeConfirm />} />

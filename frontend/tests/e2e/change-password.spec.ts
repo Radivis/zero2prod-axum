@@ -21,7 +21,12 @@ test.describe('Change Password', () => {
     
     // Wait for all network requests (including auth check) to settle
     await page.waitForLoadState('networkidle', { timeout: 15000 });
-    
+    // Verify we're on the password change page
+    const currentUrl = page.url();
+    if (!currentUrl.includes('/admin/password')) {
+        throw new Error(`Expected to be on password change page, but current URL is: ${currentUrl}`);
+    }
+        
     // Wait for the password form to be visible
     await page.getByLabel('Current password', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     

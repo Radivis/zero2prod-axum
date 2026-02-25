@@ -1,6 +1,6 @@
-use crate::helpers::{assert_is_json_error, assert_json_response};
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::{spawn_app, spawn_app_container_with_user};
+use crate::common::function_name;
+use crate::common::{assert_is_json_error, assert_json_response};
+use crate::common::{spawn_app, spawn_app_container_with_user};
 
 #[tokio::test]
 async fn you_must_be_logged_in_to_access_the_admin_dashboard() {

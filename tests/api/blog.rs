@@ -1,6 +1,6 @@
-use crate::helpers::{assert_is_json_error, assert_json_response, create_blog_post};
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::{spawn_app, spawn_app_container_with_user};
+use crate::common::function_name;
+use crate::common::{assert_is_json_error, assert_json_response, create_blog_post};
+use crate::common::{spawn_app, spawn_app_container_with_user};
 use uuid::Uuid;
 
 // ==================== Authentication Tests ====================

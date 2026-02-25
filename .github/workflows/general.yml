@@ -87,7 +87,7 @@ jobs:
       - name: Run tests with nextest
         env:
           RUST_BACKTRACE: "1"
-        run: cargo nextest run --profile ci --no-fail-fast  # --no-fail-fast for full coverage
+        run: cargo nextest run --profile ci --no-fail-fast --features e2e-tests # --no-fail-fast for full coverage
 
       - name: Upload test results (on failure)
         if: failure()
@@ -166,6 +166,9 @@ jobs:
       # Setup Rust for backend
       - name: Install the Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # Customize cache key to include e2e-tests feature and prevent using cache from builds without features
+          cache-key: release-e2e-tests
       
       - name: Install sqlx-cli
         run: cargo install sqlx-cli
@@ -185,9 +188,33 @@ jobs:
       - name: Migrate database
         run: SKIP_DOCKER=true ./scripts/init_postgres.sh
       
-      # Build test backend binary
-      - name: Build spawn_test_server
-        run: cargo build --bin spawn_test_server
+      # Build test backend binary (release - must match backend-spawn-helpers.ts which expects target/release/)
+      - name: Build spawn_test_server with e2e-tests feature
+        run: |
+          # Build with e2e-tests feature with verbose output
+          echo "Building spawn_test_server with --features e2e-tests..."
+          cargo build --bin spawn_test_server --features e2e-tests --release -vv 2>&1 | tee /tmp/build.log
+          
+          # Show what was compiled
+          echo "=== Build summary ==="
+          grep "Compiling\|Fresh" /tmp/build.log | tail -20 || true
+
+      - name: Verify spawn_test_server has e2e-tests feature
+        run: |
+          if [ ! -f ./target/release/spawn_test_server ]; then
+            echo "ERROR: spawn_test_server binary not found"
+            exit 1
+          fi
+          echo "Binary exists: $(ls -lh ./target/release/spawn_test_server)"
+          
+          # Check if e2e-tests feature is enabled
+          if ./target/release/spawn_test_server --check-features | grep -q "ENABLED"; then
+            echo "✓ Binary verification passed - e2e-tests feature is ENABLED"
+          else
+            echo "✗ ERROR: Binary was built WITHOUT e2e-tests feature"
+            ./target/release/spawn_test_server --check-features || true
+            exit 1
+          fi
       
       # Setup Node.js for frontend
       - name: Setup Node.js

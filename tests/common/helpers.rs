@@ -136,6 +136,22 @@ pub async fn mount_mock_email_server(
     }
 }
 
+/// Asserts that a response is a 303 redirect to the subscription confirmation page
+pub fn assert_subscription_confirm_redirect(response: &reqwest::Response) {
+    assert_eq!(
+        response.status().as_u16(),
+        303,
+        "Expected 303 redirect to /subscribed"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
+        Some(zero2prod::routes::constants::SUBSCRIPTION_CONFIRMED_REDIRECT_PATH)
+    );
+}
+
 pub fn assert_is_json_error(response: &reqwest::Response, expected_status: u16) {
     assert_eq!(response.status().as_u16(), expected_status);
     assert_eq!(
@@ -203,7 +219,7 @@ pub async fn create_blog_post(
 
 /// Helper function to create a confirmed subscriber and return their unsubscribe token
 pub async fn create_confirmed_subscriber_with_token(
-    app: &crate::test_app::TestApp,
+    app: &super::test_app::TestApp,
     name: &str,
     email: &str,
 ) -> String {
@@ -229,8 +245,14 @@ pub async fn create_confirmed_subscriber_with_token(
         .map(|(_, value)| value.to_string())
         .unwrap();
 
-    // Confirm subscription
-    reqwest::get(confirmation_links.html).await.unwrap();
+    // Confirm subscription - use api_client which does not follow redirects
+    let response = app
+        .api_client
+        .get(confirmation_links.html.as_str())
+        .send()
+        .await
+        .unwrap();
+    assert_subscription_confirm_redirect(&response);
 
     token
 }

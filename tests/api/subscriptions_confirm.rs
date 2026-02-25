@@ -1,6 +1,6 @@
-use crate::helpers::mount_mock_email_server;
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::spawn_app;
+use crate::common::function_name;
+use crate::common::spawn_app;
+use crate::common::{assert_subscription_confirm_redirect, mount_mock_email_server};
 
 #[tokio::test]
 async fn confirmations_without_token_are_rejected_with_a_400() {
@@ -52,7 +52,7 @@ async fn confirmations_with_nonexistent_token_are_rejected_with_a_401() {
 }
 
 #[tokio::test]
-async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
+async fn the_link_returned_by_subscribe_returns_a_303_redirect_if_called() {
     // Arrange
     let app = spawn_app(function_name!()).await;
     let body = serde_json::json!({
@@ -64,10 +64,15 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
 
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
     let confirmation_links = app.get_confirmation_links(email_request);
-    // Act
-    let response = reqwest::get(confirmation_links.html).await.unwrap();
-    // Assert
-    assert_eq!(response.status().as_u16(), 200);
+    // Act - use api_client which does not follow redirects (backend redirects to /subscribed)
+    let response = app
+        .api_client
+        .get(confirmation_links.html.as_str())
+        .send()
+        .await
+        .unwrap();
+    // Assert - 303 See Other redirect to /subscribed
+    assert_subscription_confirm_redirect(&response);
 }
 
 #[tokio::test]
@@ -82,12 +87,14 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
     app.post_subscriptions(&body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
     let confirmation_links = app.get_confirmation_links(email_request);
-    // Act
-    reqwest::get(confirmation_links.html)
+    // Act - use api_client which does not follow redirects (backend redirects to /subscribed)
+    let response = app
+        .api_client
+        .get(confirmation_links.html.as_str())
+        .send()
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    assert_subscription_confirm_redirect(&response);
     // Assert
     let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(&app.db_connection_pool)

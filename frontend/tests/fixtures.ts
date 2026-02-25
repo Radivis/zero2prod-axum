@@ -251,10 +251,11 @@ export async function makeConfirmedSubscriber(
   log(`Confirming subscription for ${email}`);
   
   const confirmResponse = await fetch(
-    `${backendAddress}/api/subscriptions/confirm?subscription_token=${token}`
+    `${backendAddress}/api/subscriptions/confirm?subscription_token=${token}`,
+    { redirect: 'manual' }
   );
-
-  if (!confirmResponse.ok) {
+  
+  if (confirmResponse.status !== 303 && !confirmResponse.ok) {
     const responseText = await confirmResponse.text();
     log(`Failed to confirm subscription: ${confirmResponse.status} ${responseText}`);
     throw new Error(`Failed to confirm subscription: ${confirmResponse.status}`);

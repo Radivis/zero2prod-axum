@@ -1,4 +1,5 @@
 export const ROUTES = {
+  subscribed: '/subscribed',
   adminBlog: '/admin/blog',
   adminBlogNew: '/admin/blog/new',
   adminBlogEditPath: '/admin/blog/:id/edit',

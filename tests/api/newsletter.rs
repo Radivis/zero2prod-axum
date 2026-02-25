@@ -1,8 +1,9 @@
-use crate::helpers::{
-    ConfirmationLinks, assert_is_json_error, assert_json_response, mount_mock_email_server,
+use crate::common::function_name;
+use crate::common::{
+    ConfirmationLinks, assert_is_json_error, assert_json_response,
+    assert_subscription_confirm_redirect, mount_mock_email_server,
 };
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::{TestApp, spawn_app, spawn_app_container_with_user};
+use crate::common::{TestApp, spawn_app, spawn_app_container_with_user};
 use fake::Fake;
 use fake::faker::internet::en::SafeEmail;
 use fake::faker::name::en::Name;
@@ -379,11 +380,14 @@ async fn create_confirmed_subscriber(app: &TestApp) {
     // We can then reuse the same helper and just add
     // an extra step to actually call the confirmation link!
     let confirmation_link = create_unconfirmed_subscriber(app).await;
-    reqwest::get(confirmation_link.html)
+    // Use api_client which does not follow redirects (backend redirects to /subscribed)
+    let response = app
+        .api_client
+        .get(confirmation_link.html.as_str())
+        .send()
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    assert_subscription_confirm_redirect(&response);
 }
 
 #[tokio::test]

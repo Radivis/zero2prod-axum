@@ -1,5 +1,5 @@
-use crate::macros::function_name_macro::function_name;
-use crate::test_app::spawn_app;
+use crate::common::function_name;
+use crate::common::spawn_app;
 
 #[tokio::test]
 async fn health_check_works() {

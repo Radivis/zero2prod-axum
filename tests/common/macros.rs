@@ -13,29 +13,38 @@ pub mod function_name_macro {
 
             // Helper closure to extract module and function from test path
             let extract_from_test_path = |test_path: &str| -> Option<String> {
-                // Test path format: "api::module::function_name" or "tests::api::module::function_name"
+                // Test path formats:
+                // - "api::module::function_name" (api binary, 3 parts)
+                // - "subscription_token::get_token_..." (api-e2e binary, 2 parts - no "api" in path)
                 let parts: Vec<&str> = test_path.split("::").collect();
 
-                // Find where "api" appears
-                if let Some(api_idx) = parts.iter().position(|s| *s == "api" || s.contains("api")) {
+                let (module, function) = if let Some(api_idx) = parts.iter().position(|s| *s == "api" || s.contains("api")) {
+                    // api binary: api::module::function
                     if api_idx + 2 < parts.len() {
-                        let module = parts[api_idx + 1];
-                        let function = parts[api_idx + 2];
-
-                        // Validate these look like valid names
-                        let is_valid_module = !module.starts_with("_")
-                            && !module.contains("helpers")
-                            && module.chars().all(|c| c.is_alphanumeric() || c == '_');
-
-                        let is_valid_func = !function.starts_with("_")
-                            && function.chars().any(|c| c.is_alphabetic());
-
-                        if is_valid_module && is_valid_func {
-                            return Some(format!("{}-{}", module, function));
-                        }
+                        (parts[api_idx + 1], parts[api_idx + 2])
+                    } else {
+                        return None;
                     }
+                } else if parts.len() == 2 {
+                    // api-e2e binary: module::function (no "api" in path)
+                    (parts[0], parts[1])
+                } else {
+                    return None;
+                };
+
+                // Validate these look like valid names
+                let is_valid_module = !module.starts_with("_")
+                    && module != "helpers"
+                    && module.chars().all(|c| c.is_alphanumeric() || c == '_');
+
+                let is_valid_func = !function.starts_with("_")
+                    && function.chars().any(|c| c.is_alphabetic());
+
+                if is_valid_module && is_valid_func {
+                    Some(format!("{}-{}", module, function))
+                } else {
+                    None
                 }
-                None
             };
 
             // Try NEXTEST_TEST_NAME first

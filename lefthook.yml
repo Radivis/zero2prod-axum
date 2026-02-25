@@ -36,7 +36,7 @@ pre-commit:
 
 post-commit:
   commands:
-    e2e-tests:
-      run: ./scripts/run-e2e-background.sh &
-      # Runs E2E tests in background, opens report on failure
+    e2e-reminder:
+      run: ./scripts/e2e-reminder.sh
+      # Reminds developers to run E2E tests manually
       priority: 1

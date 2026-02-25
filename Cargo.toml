@@ -1,6 +1,7 @@
 [package]
 name = "zero2prod"
 version = "0.1.0"
+default-run = "zero2prod"
 authors = ["Michael Hrenka <radivis@radivis.com>"]
 edition = "2024"
 

@@ -1,14 +1,13 @@
+#[path = "../common/mod.rs"]
+mod common;
+
 mod admin_dashboard;
 mod blog;
 mod change_password;
 mod health_check;
-mod helpers;
 mod initial_password;
 mod login;
-mod macros;
 mod newsletter;
 mod subscriptions;
 mod subscriptions_confirm;
 mod subscriptions_unsubscribe;
-mod test_app;
-mod test_data;
