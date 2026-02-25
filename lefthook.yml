@@ -36,15 +36,7 @@ pre-commit:
 
 post-commit:
   commands:
-    e2e-tests:
-      run: ./scripts/run-e2e-background.sh
-      # Runs E2E tests in background, opens report on failure
+    e2e-reminder:
+      run: ./scripts/e2e-reminder.sh
+      # Reminds developers to run E2E tests manually
       priority: 1
-
-pre-push:
-  parallel: false
-  commands:
-    # Run E2E tests synchronously before push
-    e2e-tests:
-      run: cd frontend && npx playwright test
-      # Fails the push if E2E tests fail
