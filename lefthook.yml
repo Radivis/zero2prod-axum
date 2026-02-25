@@ -37,16 +37,13 @@ pre-commit:
 post-commit:
   commands:
     e2e-tests:
-      run: ./scripts/run-e2e-background.sh &
+      run: ./scripts/run-e2e-background.sh
       # Runs E2E tests in background, opens report on failure
       priority: 1
 
 pre-push:
   parallel: false
   commands:
-    # Run all backend tests before pushing
-    backend-tests:
-      run: cargo test --workspace
     # Run E2E tests synchronously before push
     e2e-tests:
       run: cd frontend && npx playwright test

@@ -4,36 +4,55 @@
 
 cd "$(dirname "$0")/../frontend" || exit 1
 
-echo "🧪 Running E2E tests in background..."
+# Create a unique log file
+LOG_FILE="/tmp/e2e-tests-$(date +%s).log"
+MARKER_FILE="/tmp/e2e-tests-running-$(date +%s)"
 
-# Run tests, capture exit code
-if npx playwright test --reporter=list 2>&1 | tee /tmp/e2e-tests-$$.log; then
-    echo "✅ E2E tests passed"
-    # Send success notification if notify-send is available
-    if command -v notify-send &> /dev/null; then
-        notify-send "✅ E2E Tests" "All tests passed!" -u low
-    fi
-else
-    EXIT_CODE=$?
-    echo "❌ E2E tests failed (exit code: $EXIT_CODE) - opening report..."
-    
-    # Send failure notification
-    if command -v notify-send &> /dev/null; then
-        notify-send "❌ E2E Tests Failed" "Opening report... Click to view" -u critical
-    fi
-    
-    # Open report without starting server (just open the HTML file)
-    xdg-open playwright-report/index.html 2>/dev/null || \
-    open playwright-report/index.html 2>/dev/null || \
-    echo "Report available at: $(pwd)/playwright-report/index.html"
-    
-    # Also print a prominent error message
-    echo ""
-    echo "════════════════════════════════════════════════════"
-    echo "  ❌ E2E TESTS FAILED - Check the Playwright report"
-    echo "════════════════════════════════════════════════════"
-    echo ""
-fi
+# Show immediate feedback
+echo "🧪 Starting E2E tests in background..."
+echo "   Log file: $LOG_FILE"
 
-# Clean up log after 1 minute
-(sleep 60 && rm -f /tmp/e2e-tests-$$.log) &
+# Run tests in truly independent background process using nohup
+nohup bash -c '
+    echo "════════════════════════════════════════════════════" > '"'$LOG_FILE'"'
+    echo "  🧪 E2E TESTS STARTED at $(date)" >> '"'$LOG_FILE'"'
+    echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
+    echo "" >> '"'$LOG_FILE'"'
+    
+    if npx playwright test --reporter=list >> '"'$LOG_FILE'"' 2>&1; then
+        echo "" >> '"'$LOG_FILE'"'
+        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
+        echo "  ✅ E2E TESTS PASSED at $(date)" >> '"'$LOG_FILE'"'
+        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
+        
+        # Send success notification
+        if command -v notify-send &> /dev/null; then
+            notify-send "✅ E2E Tests" "All tests passed!" -u low
+        fi
+    else
+        EXIT_CODE=$?
+        echo "" >> '"'$LOG_FILE'"'
+        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
+        echo "  ❌ E2E TESTS FAILED at $(date) (exit code: $EXIT_CODE)" >> '"'$LOG_FILE'"'
+        echo "════════════════════════════════════════════════════" >> '"'$LOG_FILE'"'
+        
+        # Send failure notification
+        if command -v notify-send &> /dev/null; then
+            notify-send "❌ E2E Tests Failed" "Check log file or Playwright report" -u critical
+        fi
+        
+        # Open report
+        xdg-open playwright-report/index.html 2>/dev/null || \
+        open playwright-report/index.html 2>/dev/null || true
+    fi
+    
+    rm -f '"'$MARKER_FILE'"'
+' > /dev/null 2>&1 &
+
+BG_PID=$!
+echo "✓ E2E tests launched in background (PID: $BG_PID)"
+echo "   To monitor: tail -f $LOG_FILE"
+
+# Optionally, open the log file in a terminal for live viewing
+# Uncomment if you want automatic log viewing:
+# (sleep 2 && xterm -e "tail -f $LOG_FILE" &) &
