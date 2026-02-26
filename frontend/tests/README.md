@@ -113,7 +113,7 @@ test('my test', async ({ page, backendApp, frontendServer }) => {
 ```typescript
 test('redirects when no users', async ({ page, backendApp, frontendServer }) => {
   await page.goto('/login');
-  // Should redirect to initial_password
+  // Should redirect to initial-password
 });
 ```
 

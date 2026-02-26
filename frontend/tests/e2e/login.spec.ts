@@ -35,7 +35,7 @@ test.describe('Login', () => {
   });
 
   test('login with invalid credentials shows error message', async ({ page, backendApp, frontendServer }) => {
-    // Create a valid user first (so we're not redirected to initial_password)
+    // Create a valid user first (so we're not redirected to initial-password)
     const userResult = await makeUser(backendApp.address, 'valid-user', 'valid-password-12345');
     if (!userResult.success) {
       throw new Error(`Failed to create test user: ${userResult.error?.error}`);
@@ -65,7 +65,7 @@ test.describe('Login', () => {
     await page.goto(`${frontendServer.url}/login`);
     
     // Should redirect to initial password page
-    await page.waitForURL(/\/initial_password/, { timeout: 10000 });
-    expect(page.url()).toContain('/initial_password');
+    await page.waitForURL(/\/initial-password/, { timeout: 10000 });
+    expect(page.url()).toContain('/initial-password');
   });
 });

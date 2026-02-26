@@ -69,7 +69,7 @@ Removed all HTML serving code:
 
 ### ✅ Vite Proxy Configuration
 Configured intelligent request routing in `frontend/vite.config.ts`:
-- **GET requests** to page routes (`/login`, `/admin/*`, `/initial_password`, `/subscriptions`) → serve React app
+- **GET requests** to page routes (`/login`, `/admin/*`, `/initial-password`, `/subscriptions`) → serve React app
 - **POST requests** → proxy to backend API
 - **`/api/*` routes** → always proxy to backend
 - Properly forwards `Content-Type` headers for API requests

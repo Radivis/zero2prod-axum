@@ -8,7 +8,7 @@ interface UsersExistResponse {
 
 /**
  * Custom hook to check if any users exist in the database
- * Redirects to /initial_password if no users exist
+ * Redirects to /initial-password if no users exist
  * @returns {boolean} checking - Whether the check is still in progress
  */
 export function useCheckUsersExist() {
@@ -20,7 +20,7 @@ export function useCheckUsersExist() {
       try {
         const response = await apiRequest<UsersExistResponse>('/api/users/exists')
         if (!response.users_exist) {
-          navigate('/initial_password')
+          navigate('/initial-password')
         }
       } catch (err) {
         // If check fails, allow login attempt anyway

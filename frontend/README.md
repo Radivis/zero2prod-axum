@@ -49,7 +49,7 @@ The frontend will be available at `http://localhost:3000`
 - **Blog Post** (`/blog/:id`) - Individual blog post
 - **API Documentation** (`/docs`) - Interactive Swagger UI
 - **Login** (`/login`) - User authentication
-- **Initial Password** (`/initial_password`) - First-time setup
+- **Initial Password** (`/initial-password`) - First-time setup
 
 ### Admin Pages (Protected)
 

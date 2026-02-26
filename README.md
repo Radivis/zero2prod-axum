@@ -32,7 +32,7 @@ Don't forget to start the Postgres and Redis/Valkey servers/Docker containers be
 See initialization logic under scripts/
 
 ### Coding Guidelines
-Both humans and agents should adhere to .curor/rules. The file .curor/rules/coding-codex.mdc is the canonical starting point.
+Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
 
 ### Testing
 #### Backend
