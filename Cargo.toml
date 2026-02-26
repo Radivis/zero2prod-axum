@@ -4,6 +4,7 @@ version = "0.1.0"
 default-run = "zero2prod"
 authors = ["Michael Hrenka <radivis@radivis.com>"]
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 axum = "0.8"

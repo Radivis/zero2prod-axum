@@ -70,3 +70,7 @@ Both humans and agents should adhere to .curor/rules. The file .curor/rules/codi
     - Publish as static page
       - button_title
       - position (int)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
