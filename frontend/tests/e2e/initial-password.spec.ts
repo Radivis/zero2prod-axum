@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures';
 
 test.describe('Initial Password', () => {
   test('creates initial admin user successfully', async ({ page, frontendServer }) => {
-    await page.goto(`${frontendServer.url}/initial_password`);
+    await page.goto(`${frontendServer.url}/initial-password`);
     
     // Fill in password form
     await page.getByLabel('New password').waitFor({ state: 'visible' });
@@ -19,7 +19,7 @@ test.describe('Initial Password', () => {
   });
 
   test('shows error when passwords do not match', async ({ page, frontendServer }) => {
-    await page.goto(`${frontendServer.url}/initial_password`);
+    await page.goto(`${frontendServer.url}/initial-password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
     
@@ -32,11 +32,11 @@ test.describe('Initial Password', () => {
     await expect(page.locator('text=/Passwords do not match/i')).toBeVisible({ timeout: 5000 });
     
     // Should still be on initial password page
-    expect(page.url()).toContain('/initial_password');
+    expect(page.url()).toContain('/initial-password');
   });
 
   test('shows error when password is too short', async ({ page, frontendServer }) => {
-    await page.goto(`${frontendServer.url}/initial_password`);
+    await page.goto(`${frontendServer.url}/initial-password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
     
@@ -50,7 +50,7 @@ test.describe('Initial Password', () => {
   });
 
   test('shows error when password is too long', async ({ page, frontendServer }) => {
-    await page.goto(`${frontendServer.url}/initial_password`);
+    await page.goto(`${frontendServer.url}/initial-password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
     

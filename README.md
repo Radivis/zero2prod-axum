@@ -1,6 +1,8 @@
 # zero2prod-axum
 Template app based on the book "Zero To Production in Rust" by Luca Palmieri with Axum instead of actix-web.
 
+In this context "template app" means that this repo is intended to be a conventient "starter package" for more specific apps using a Rust + Axum + React or similar stack.
+
 ## Requirements
 - Docker
     - Postgres
@@ -29,7 +31,11 @@ Don't forget to start the Postgres and Redis/Valkey servers/Docker containers be
 
 See initialization logic under scripts/
 
+### Coding Guidelines
+Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
+
 ### Testing
+#### Backend
 Testing works with the default
 
 `cargo test`
@@ -37,6 +43,20 @@ Testing works with the default
 but using nextest is preferred:
 
 `cargo nextest run`
+
+#### Frontend
+
+There is a convenient script that can run all e2e tests conveniently in the background and issues a notification (currently only tested on Linux) on test success / failure:
+`./scripts/run-e2e-background.sh`
+
+Otherwise change to frontend directory first:
+`cd frontend`
+
+All tests:
+`npm run test`
+
+For e2e tests only:
+`npm run test:e2e`
 
 ## Deployment
 Deploy as Digital Ocean App
@@ -50,10 +70,15 @@ Some improvements over the solutions from the book
 - The TestApp struct is refactored into two versions: One without user, and one with a user
 - Added basic blogging features
 - Added unsubscribe functionality
+- Added a nice start page
 
 ## Roadmap
 
-- Add static page
+- Optimize full stack deployment
+- Backend: Improve error handling to make use of the e* helpers
+
+### Future Options
+- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
 - Unify blog posting, newsletter sending, and static page management (turns the app into a lightweight CMS)
   - When publishing an article the release channels need to be selected via checkboxes:
     - Release as blog post (checked by default)
@@ -61,9 +86,7 @@ Some improvements over the solutions from the book
     - Publish as static page
       - button_title
       - position (int)
-- Optimize full stack deployment
-- Backend: Improve error handling to make use of the e* helpers
-- Integrate precise agentic workflow into the repo
 
-### Future Options
-- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

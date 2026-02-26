@@ -27,7 +27,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path={ROUTES.subscribed} element={<Subscribed />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/initial_password" element={<InitialPassword />} />
+            <Route path="/initial-password" element={<InitialPassword />} />
             <Route path="/subscriptions/unsubscribe" element={<UnsubscribeConfirm />} />
             <Route path="/docs" element={<ApiDocs />} />
             <Route path="/blog" element={<Blog />} />

@@ -1,7 +1,7 @@
 import { createTheme, Theme } from '@mui/material/styles'
 
 // Shared accent - orange used in both themes
-const ACCENT_ORANGE = 'hsl(14, 100%, 60%)'
+const ACCENT_ORANGE = 'hsl(17, 100%, 60%)'
 
 // Light theme colors - purple-blue family with high lightness
 const LIGHT_BG_DEFAULT = 'hsl(255, 75%, 80%)'
