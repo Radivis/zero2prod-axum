@@ -1,6 +1,8 @@
 # zero2prod-axum
 Template app based on the book "Zero To Production in Rust" by Luca Palmieri with Axum instead of actix-web.
 
+In this context "template app" means that this repo is intended to be a conventient "starter package" for more specific apps using a Rust + Axum + React or similar stack.
+
 ## Requirements
 - Docker
     - Postgres
@@ -29,7 +31,11 @@ Don't forget to start the Postgres and Redis/Valkey servers/Docker containers be
 
 See initialization logic under scripts/
 
+### Coding Guidelines
+Both humans and agents should adhere to .curor/rules. The file .curor/rules/coding-codex.mdc is the canonical starting point.
+
 ### Testing
+#### Backend
 Testing works with the default
 
 `cargo test`
@@ -37,6 +43,20 @@ Testing works with the default
 but using nextest is preferred:
 
 `cargo nextest run`
+
+#### Frontend
+
+There is a convenient script that can run all e2e tests conveniently in the background and issues a notification (currently only tested on Linux) on test success / failure:
+`./scripts/run-e2e-background.sh`
+
+Otherwise change to frontend directory first:
+`cd frontend`
+
+All tests:
+`npm run test`
+
+For e2e tests only:
+`npm run test:e2e`
 
 ## Deployment
 Deploy as Digital Ocean App
@@ -52,14 +72,10 @@ Some improvements over the solutions from the book
 - Added unsubscribe functionality
 - Added a nice start page
 
-## Coding Guidelines
-Both humans and agents should adhere to .curor/rules. The file .curor/rules/coding-codex.mdc is the canonical starting point.
-
 ## Roadmap
 
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
-- Add yaml spec files for all features
 
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
