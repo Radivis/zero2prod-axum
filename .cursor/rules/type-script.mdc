@@ -1,6 +1,6 @@
 ---
 alwaysApply: false
-globs: ["frontend/**/*.ts, frontend/**/*.tsx"]
+globs: ["frontend/**/*.ts", "frontend/**/*.tsx"]
 ---
 TypeScript is JavaScript with types. Please make smart use of types and avoid cheap copouts like using "any".
 

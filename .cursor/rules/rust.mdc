@@ -1,6 +1,6 @@
 ---
 alwaysApply: false
-globs: ["/**/*.rs"]
+globs: ["**/*.rs"]
 ---
 Always reason step-by-step about ownership, borrowing, lifetimes, Send/Sync.
 

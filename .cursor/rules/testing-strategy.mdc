@@ -24,11 +24,13 @@ When adding or modifying backend API endpoints:
 5. Implementation is done only after tests exist and fail appropriately
 
 **Example test structure:**
+```rust
 #[tokio::test]
 async fn create_blog_post_returns_201() { /* test first */ }
 
 #[tokio::test] 
 async fn draft_posts_not_visible_publicly() { /* test first */ }
+```
 
 As a general rule of thumb, we want to make sure that the API works as intended, so we focus on integration tests to make sure that it does. We only use unit tests where the implementation details are complicated and covering them with integration tests would be excessive.
 

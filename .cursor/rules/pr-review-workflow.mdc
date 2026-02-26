@@ -9,7 +9,7 @@ alwaysApply: false
 2. Agent MUST:
    - Perform independent analysis
    - Look for: DRY violations, magic numbers, architectural issues - also see coding-codex.mdc
-   - Document findings separately in .curor/pr-reviews
+   - Document findings separately in .cursor/pr-reviews
    - Get approval before fixing (to avoid scope creep)
 3. Rationale: Agentic reviews catch many issues first; saves human time.
 
