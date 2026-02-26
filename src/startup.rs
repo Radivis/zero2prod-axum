@@ -4,6 +4,7 @@ use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_redis_store::{RedisStore, fred::prelude::*};
@@ -84,6 +85,15 @@ impl Application {
 
     pub async fn run_until_stopped(self, configuration: Settings) -> Result<(), std::io::Error> {
         let connection_pool = get_connection_pool(&configuration.database);
+
+        sqlx::migrate!("./migrations")
+            .run(&connection_pool)
+            .await
+            .map_err(|e| {
+                std::io::Error::other(format!("Failed to run database migrations: {e}"))
+            })?;
+        tracing::info!("Database migrations completed successfully");
+
         let email_client = configuration.email_client.client();
         let app_state = AppState {
             db: connection_pool,
@@ -106,8 +116,11 @@ impl Application {
             .map_err(|e| std::io::Error::other(format!("Failed to connect to Redis: {}", e)))?;
 
         let session_store = RedisStore::new(pool);
+        let is_production = std::env::var("APP_ENVIRONMENT")
+            .map(|env| env == "production")
+            .unwrap_or(false);
         let session_layer = SessionManagerLayer::new(session_store)
-            .with_secure(false) // Set to true for HTTPS in production
+            .with_secure(is_production)
             .with_expiry(Expiry::OnInactivity(
                 tower_sessions::cookie::time::Duration::hours(1),
             ));
@@ -219,6 +232,22 @@ impl Application {
             .with_state(app_state)
             .layer(session_layer)
             .layer(TraceLayer::new_for_http());
+
+        let static_dir =
+            std::env::var("STATIC_FILES_DIR").unwrap_or_else(|_| "./static".to_string());
+        let static_path = std::path::Path::new(&static_dir);
+        let app = if static_path.exists() && static_path.is_dir() {
+            let index_fallback = ServeFile::new(static_path.join("index.html"));
+            let serve_spa = ServeDir::new(&static_dir).not_found_service(index_fallback);
+            tracing::info!("Serving static files from {}", static_dir);
+            app.fallback_service(serve_spa)
+        } else {
+            tracing::info!(
+                "No static files directory found at {}, skipping SPA serving",
+                static_dir
+            );
+            app
+        };
 
         let listener = tokio::net::TcpListener::from_std(self.listener)?;
         axum::serve(listener, app).await?;

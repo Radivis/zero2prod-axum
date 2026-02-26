@@ -59,7 +59,44 @@ For e2e tests only:
 `npm run test:e2e`
 
 ## Deployment
-Deploy as Digital Ocean App
+
+The app is fully Dockerized and can run on any VPS or machine with Docker and Docker Compose.
+
+### Quick Start (Production)
+
+1. Copy the example environment file and fill in your values:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual secrets and domain:
+   - `DOMAIN` -- your domain name (e.g., `myapp.example.com`)
+   - `APP_BASE_URL` -- full URL including scheme (e.g., `https://myapp.example.com`)
+   - `APP_HMAC_SECRET` -- a long random string for HMAC verification
+   - `APP_EMAIL_CLIENT__SENDER_EMAIL` — Postmark-approved sender email address
+   - `POSTGRES_APP_PASSWORD` -- a strong database password
+   - `POSTMARK_API_TOKEN` -- your Postmark API token for sending emails
+
+3. Start everything:
+   ```bash
+   docker compose up -d
+   ```
+
+This brings up four containers:
+- **caddy** -- reverse proxy with automatic HTTPS via Let's Encrypt
+- **zero2prod** -- the Rust API server, also serving the React SPA
+- **postgres** -- PostgreSQL 16 database (data persisted in a Docker volume)
+- **valkey** -- Valkey 8 for session storage (data persisted in a Docker volume)
+
+Database migrations run automatically on startup.
+
+### Local Testing with Docker
+
+Leave `DOMAIN=localhost` in `.env`. Caddy will use its built-in local CA (expect a self-signed certificate warning in the browser).
+
+### DNS Setup
+
+Point your domain's A record to the VPS IP address. Caddy will automatically obtain and renew TLS certificates once DNS resolves correctly.
 
 ## Improvements
 Some improvements over the solutions from the book
@@ -74,7 +111,6 @@ Some improvements over the solutions from the book
 
 ## Roadmap
 
-- Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
 
 ### Future Options

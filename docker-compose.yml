@@ -1,8 +1,75 @@
 services:
-  postgres:
-    image: postgres:16.11-bookworm
-    environment:
-      POSTGRES_PASSWORD: password
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
     ports:
-      - "5432:5432"
-    # …
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      zero2prod:
+        condition: service_healthy
+
+  zero2prod:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_APPLICATION__HOST: "0.0.0.0"
+      APP_APPLICATION__BASE_URL: "${APP_BASE_URL:-http://localhost}"
+      APP_APPLICATION__HMAC_SECRET: "${APP_HMAC_SECRET:?APP_HMAC_SECRET must be set}"
+      APP_DATABASE__HOST: "postgres"
+      APP_DATABASE__PORT: "5432"
+      APP_DATABASE__USERNAME: "${POSTGRES_APP_USER:-app}"
+      APP_DATABASE__PASSWORD: "${POSTGRES_APP_PASSWORD:-secret}"
+      APP_DATABASE__DATABASE_NAME: "${POSTGRES_DB:-newsletter}"
+      APP_DATABASE__REQUIRE_SSL: "false"
+      APP_EMAIL_CLIENT__SENDER_EMAIL: "${APP_EMAIL_CLIENT__SENDER_EMAIL:?APP_EMAIL_CLIENT__SENDER_EMAIL must be set}"
+      APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN: "${POSTMARK_API_TOKEN:?POSTMARK_API_TOKEN must be set}"
+      APP_REDIS_URI: "redis://valkey:6379"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health_check"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_APP_USER:-app}"
+      POSTGRES_PASSWORD: "${POSTGRES_APP_PASSWORD:-secret}"
+      POSTGRES_DB: "${POSTGRES_DB:-newsletter}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_APP_USER:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8
+    restart: unless-stopped
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  valkey_data:
+  caddy_data:
+  caddy_config:

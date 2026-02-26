@@ -3,4 +3,11 @@ target/
 tests/
 Dockerfile
 scripts/
-migrations/
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+.git/
+.github/
+.cursor/
+doc/
