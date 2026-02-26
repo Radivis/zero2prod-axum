@@ -57,9 +57,9 @@ Both humans and agents should adhere to .curor/rules. The file .curor/rules/codi
 
 ## Roadmap
 
-- Integrate precise agentic workflow into the repo
 - Optimize full stack deployment
 - Backend: Improve error handling to make use of the e* helpers
+- Add yaml spec files for all features
 
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
