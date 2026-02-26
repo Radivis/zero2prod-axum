@@ -73,6 +73,7 @@ The app is fully Dockerized and can run on any VPS or machine with Docker and Do
    - `DOMAIN` -- your domain name (e.g., `myapp.example.com`)
    - `APP_BASE_URL` -- full URL including scheme (e.g., `https://myapp.example.com`)
    - `APP_HMAC_SECRET` -- a long random string for HMAC verification
+   - `APP_EMAIL_CLIENT__SENDER_EMAIL` — Postmark-approved sender email address
    - `POSTGRES_APP_PASSWORD` -- a strong database password
    - `POSTMARK_API_TOKEN` -- your Postmark API token for sending emails
 

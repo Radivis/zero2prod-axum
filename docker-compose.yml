@@ -27,8 +27,9 @@ services:
       APP_DATABASE__PASSWORD: "${POSTGRES_APP_PASSWORD:-secret}"
       APP_DATABASE__DATABASE_NAME: "${POSTGRES_DB:-newsletter}"
       APP_DATABASE__REQUIRE_SSL: "false"
+      APP_EMAIL_CLIENT__SENDER_EMAIL: "${APP_EMAIL_CLIENT__SENDER_EMAIL:?APP_EMAIL_CLIENT__SENDER_EMAIL must be set}"
+      APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN: "${POSTMARK_API_TOKEN:?POSTMARK_API_TOKEN must be set}"
       APP_REDIS_URI: "redis://valkey:6379"
-      APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN: "${POSTMARK_API_TOKEN:-my-secret-token}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health_check"]
       interval: 10s

@@ -4,4 +4,4 @@ database:
   require_ssl: true
 email_client:
   base_url: "https://api.postmarkapp.com"
-  sender_email: "test@radivis.com"
+  sender_email: "YOUR_SENDER_EMAIL_ADDRESS"
