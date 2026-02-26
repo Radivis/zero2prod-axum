@@ -17,12 +17,10 @@ services:
   zero2prod:
     build: .
     restart: unless-stopped
-    ports:
-      - "8000:8000" 
     environment:
       APP_APPLICATION__HOST: "0.0.0.0"
       APP_APPLICATION__BASE_URL: "${APP_BASE_URL:-http://localhost}"
-      APP_APPLICATION__HMAC_SECRET: "${APP_HMAC_SECRET}"
+      APP_APPLICATION__HMAC_SECRET: "${APP_HMAC_SECRET:?APP_HMAC_SECRET must be set}"
       APP_DATABASE__HOST: "postgres"
       APP_DATABASE__PORT: "5432"
       APP_DATABASE__USERNAME: "${POSTGRES_APP_USER:-app}"
