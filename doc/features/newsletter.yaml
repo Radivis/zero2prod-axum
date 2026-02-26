@@ -59,6 +59,23 @@ feature:
         - Idempotency keys expire after 24 hours, allowing resend with the same key
 
   pages:
+    - Home (subscription form):
+      - description: "The home page includes a subscription form for the newsletter"
+      - path: /
+      - file: frontend/src/pages/Home.tsx
+      - visible_elements:
+        - title: "zero2prod-axum"
+        - subscription form (SubscribeForm component):
+          - legend: "Subscribe to the newsletter to receive updates on this project"
+          - form fields:
+            - email
+            - name
+          - subscribe button
+            - click_event:
+              - submits POST to /api/subscriptions
+              - on success: shows "Please check your email to confirm your subscription."
+              - on error: shows error message
+
     - Subscribed:
       - description: "Confirmation landing page shown after a subscriber clicks the confirmation link"
       - path: /subscribed
