@@ -50,10 +50,19 @@ Some improvements over the solutions from the book
 - The TestApp struct is refactored into two versions: One without user, and one with a user
 - Added basic blogging features
 - Added unsubscribe functionality
+- Added a nice start page
+
+## Coding Guidelines
+Both humans and agents should adhere to .curor/rules. The file .curor/rules/coding-codex.mdc is the canonical starting point.
 
 ## Roadmap
 
-- Add static page
+- Integrate precise agentic workflow into the repo
+- Optimize full stack deployment
+- Backend: Improve error handling to make use of the e* helpers
+
+### Future Options
+- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
 - Unify blog posting, newsletter sending, and static page management (turns the app into a lightweight CMS)
   - When publishing an article the release channels need to be selected via checkboxes:
     - Release as blog post (checked by default)
@@ -61,9 +70,3 @@ Some improvements over the solutions from the book
     - Publish as static page
       - button_title
       - position (int)
-- Optimize full stack deployment
-- Backend: Improve error handling to make use of the e* helpers
-- Integrate precise agentic workflow into the repo
-
-### Future Options
-- Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
