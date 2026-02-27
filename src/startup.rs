@@ -215,6 +215,8 @@ impl Application {
         // Combine all routes
         let app = Router::new()
             .route("/health_check", get(health_check))
+            // Subscription confirmation route for email links (redirects to frontend after confirming)
+            .route("/subscriptions/confirm", get(confirm))
             // Serve OpenAPI spec as JSON at /api/openapi.json
             .route(
                 "/api/openapi.json",
