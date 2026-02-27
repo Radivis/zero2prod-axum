@@ -7,6 +7,7 @@ In this context "template app" means that this repo is intended to be a conventi
 - Docker
     - Postgres
     - Redis / Valkey
+    - Loki + Promtail + Grafana (for log aggregation)
     - The indentation means that the app expects those servers to run in Docker containers. All you really need is Docker
 - Rust
 - Optional, but suggested for developers: Go and lefthook for the Git hooks
@@ -30,6 +31,18 @@ When you perform a commit, it is suggested to do so in a console in which you ca
 Don't forget to start the Postgres and Redis/Valkey servers/Docker containers before trying anything!
 
 See initialization logic under scripts/
+
+For local development, you can start the required services:
+```bash
+./scripts/init_postgres.sh  # Start Postgres
+./scripts/init_redis.sh     # Start Redis
+./scripts/init_loki.sh      # Start logging stack (optional, for viewing logs)
+```
+
+Then run your application:
+```bash
+cargo run
+```
 
 ### Coding Guidelines
 Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
@@ -58,6 +71,65 @@ Component tests:
 e2e tests:
 `npm run test:e2e`
 
+### Viewing Logs
+
+The application uses structured JSON logging (via `tracing` and `tracing-bunyan-formatter`). Logs can be viewed in multiple ways:
+
+#### Development (Console)
+By default, logs are printed to the console when running `cargo run`.
+
+#### Development (Grafana UI)
+For a better log viewing experience during local development:
+
+1. Start the logging stack:
+   ```bash
+   ./scripts/init_loki.sh
+   ```
+
+2. Open Grafana at `http://localhost:3000`
+   - Username: `admin`
+   - Password: `admin`
+
+3. Navigate to **Explore** (compass icon in left sidebar)
+
+4. Query your application logs using LogQL:
+   ```logql
+   # All logs from your dev containers
+   {container_name=~".*zero2prod.*"}
+   
+   # Only errors
+   {container_name=~".*zero2prod.*"} | json | level="ERROR"
+   
+   # Search for specific text
+   {container_name=~".*zero2prod.*"} |= "subscription"
+   
+   # Filter by extracted JSON fields
+   {container_name=~".*zero2prod.*"} | json | status_code >= 400
+   ```
+
+5. Use **Live** mode (button in top right) for real-time log streaming
+
+#### Production (Grafana UI)
+When deployed via Docker Compose, Grafana is automatically available:
+
+- Access Grafana at `http://your-domain:3000` (or configure Caddy to proxy it)
+- Default credentials: `admin` / `admin` (change on first login, or set `GRAFANA_ADMIN_PASSWORD` in `.env`)
+- Navigate to **Explore** and use LogQL queries:
+  ```logql
+  # All API logs
+  {compose_service="zero2prod"}
+  
+  # Filter by log level
+  {compose_service="zero2prod"} | json | level="ERROR"
+  
+  # Search in log messages
+  {compose_service="zero2prod"} |= "database"
+  ```
+
+**Log Retention**: Logs are retained for 31 days by default (configurable in `loki-config.yaml`)
+
+**Learn more about LogQL**: [Loki Query Language Documentation](https://grafana.com/docs/loki/latest/logql/)
+
 ## Deployment
 
 The app is fully Dockerized and can run on any VPS or machine with Docker and Docker Compose.
@@ -76,17 +148,21 @@ The app is fully Dockerized and can run on any VPS or machine with Docker and Do
    - `APP_EMAIL_CLIENT__SENDER_EMAIL` — Postmark-approved sender email address
    - `POSTGRES_APP_PASSWORD` -- a strong database password
    - `POSTMARK_API_TOKEN` -- your Postmark API token for sending emails
+   - `GRAFANA_ADMIN_PASSWORD` -- (optional) Grafana admin password, defaults to "admin"
 
 3. Start everything:
    ```bash
    docker compose up -d
    ```
 
-This brings up four containers:
+This brings up seven containers:
 - **caddy** -- reverse proxy with automatic HTTPS via Let's Encrypt
 - **zero2prod** -- the Rust API server, also serving the React SPA
 - **postgres** -- PostgreSQL 16 database (data persisted in a Docker volume)
 - **valkey** -- Valkey 8 for session storage (data persisted in a Docker volume)
+- **loki** -- Log aggregation and storage (data persisted in a Docker volume)
+- **promtail** -- Log collection agent that scrapes container logs
+- **grafana** -- Log visualization UI at port 3000 (data persisted in a Docker volume)
 
 Database migrations run automatically on startup.
 
