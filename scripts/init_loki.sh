@@ -41,9 +41,17 @@ docker run \
   -config.file=/etc/loki/local-config.yaml
 
 # Wait for Loki to be ready
-echo >&2 "Waiting for Loki to be ready..."
-until curl -s http://localhost:3100/ready > /dev/null 2>&1; do
-  sleep 1
+echo >&2 "Waiting for Loki to be ready (this takes ~15-20 seconds)..."
+TIMEOUT=60
+ELAPSED=0
+until curl -s http://localhost:3100/ready 2>/dev/null | grep -q "ready"; do
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo >&2 "ERROR: Loki failed to start within ${TIMEOUT} seconds"
+    echo >&2 "Check logs with: docker logs \$(docker ps --filter 'name=loki' --format '{{.ID}}')"
+    exit 1
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
 done
 echo >&2 "Loki is ready!"
 
@@ -66,7 +74,6 @@ echo >&2 "Starting Grafana..."
 docker run \
   -d \
   --name "grafana_$(date '+%s')" \
-  -p "3000:3000" \
   -e "GF_SECURITY_ADMIN_USER=admin" \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
   -e "GF_USERS_ALLOW_SIGN_UP=false" \
@@ -76,8 +83,16 @@ docker run \
 
 # Wait for Grafana to be ready
 echo >&2 "Waiting for Grafana to be ready..."
+TIMEOUT=60
+ELAPSED=0
 until curl -s http://localhost:3000/api/health > /dev/null 2>&1; do
-  sleep 1
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo >&2 "ERROR: Grafana failed to start within ${TIMEOUT} seconds"
+    echo >&2 "Check logs with: docker logs \$(docker ps --filter 'name=grafana' --format '{{.ID}}')"
+    exit 1
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
 done
 
 echo >&2 ""
