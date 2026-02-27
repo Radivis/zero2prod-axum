@@ -1,4 +1,4 @@
-import { test as base, Page } from '@playwright/test';
+import { test as base, Page, TestInfo } from '@playwright/test';
 import { spawnTestApp, stopTestApp, TestApp, waitForBackendReady } from './init';
 import { ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -362,14 +362,24 @@ interface TestFixtures {
   authenticatedPage: AuthenticatedPageWithCredentials;
 }
 
+const extractCleanTestName = (testInfo: TestInfo) => {
+  return testInfo.titlePath
+  .slice(1) // Discard file name
+  .join('__')
+  .replace(/\s+/g, '-')
+  .slice (0, 30) // Limit length to 30 characters to avoid database name length limit
+  .toLowerCase();
+}
+
 export const test = base.extend<TestFixtures>({
   // Backend test app fixture (always starts with blank database, no users)
   backendApp: async ({}, use, testInfo) => {
     const testName = testInfo.titlePath.join(' > ');
+    const cleanTestName = extractCleanTestName(testInfo);
     // Database/test name needs e2e- prefix for spawnTestApp
-    const dbTestName = `e2e-${testInfo.title.replace(/\s+/g, '-').toLowerCase()}`;
+    const dbTestName = `e2e-${cleanTestName}`;
     // Log file name without e2e- prefix
-    const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    const logFileName = cleanTestName;
     writeLog(logFileName, `Starting backend for test: ${testName}`, 'FIXTURE');
     
     // Always spawn without a user - tests create users via makeUser() if needed
@@ -391,7 +401,8 @@ export const test = base.extend<TestFixtures>({
   // Frontend server fixture - returns { process, port, url }
   frontendServer: async ({ backendApp }, use, testInfo) => {
     const app = backendApp;
-    const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    const cleanTestName = extractCleanTestName(testInfo);
+    const logFileName = cleanTestName;
     
     // Ensure backend is ready before starting frontend
     try {
@@ -431,8 +442,9 @@ export const test = base.extend<TestFixtures>({
 
   // Authenticated page fixture - creates a user and logs in
   authenticatedPage: async ({ browser, backendApp, frontendServer }, use, testInfo) => {
-    // Log file name without e2e- prefix
-    const logFileName = testInfo.title.replace(/\s+/g, '-').toLowerCase();
+    // Log file name includes describe block for uniqueness
+    const cleanTestName = extractCleanTestName(testInfo);
+    const logFileName = cleanTestName;
     
     // Create a new page with baseURL set to the dynamic frontend URL
     // This allows tests to use relative URLs like goto('/admin/dashboard')

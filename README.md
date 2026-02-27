@@ -52,10 +52,10 @@ There is a convenient script that can run all e2e tests conveniently in the back
 Otherwise change to frontend directory first:
 `cd frontend`
 
-All tests:
+Component tests:
 `npm run test`
 
-For e2e tests only:
+e2e tests:
 `npm run test:e2e`
 
 ## Deployment
