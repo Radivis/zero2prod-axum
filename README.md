@@ -52,10 +52,10 @@ There is a convenient script that can run all e2e tests conveniently in the back
 Otherwise change to frontend directory first:
 `cd frontend`
 
-All tests:
+Component tests:
 `npm run test`
 
-For e2e tests only:
+e2e tests:
 `npm run test:e2e`
 
 ## Deployment
@@ -109,19 +109,8 @@ Some improvements over the solutions from the book
 - Added unsubscribe functionality
 - Added a nice start page
 
-## Roadmap
-
-- Backend: Improve error handling to make use of the e* helpers
-
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
-- Unify blog posting, newsletter sending, and static page management (turns the app into a lightweight CMS)
-  - When publishing an article the release channels need to be selected via checkboxes:
-    - Release as blog post (checked by default)
-    - Release as newsletter <- in this case we should use a library that transforms markdown into proper HTML using the light theme of the frontend
-    - Publish as static page
-      - button_title
-      - position (int)
 
 ## License
 

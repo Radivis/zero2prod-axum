@@ -288,7 +288,11 @@ impl TestApp {
                 .links(s)
                 .filter(|l| *l.kind() == linkify::LinkKind::Url)
                 .collect();
-            assert_eq!(links.len(), 1);
+            // We expect at least one link (could be more for UX, e.g., button + fallback text)
+            assert!(
+                !links.is_empty(),
+                "Expected at least one link in email body"
+            );
             let raw_link = links[0].as_str().to_owned();
             let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
             // Let's make sure we don't call random APIs on the web

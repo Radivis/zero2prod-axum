@@ -18,7 +18,7 @@ test.describe('Initial Password', () => {
     expect(page.url()).toContain('/login');
   });
 
-  test('shows error when passwords do not match', async ({ page, frontendServer }) => {
+  test('shows error when initial passwords do not match', async ({ page, frontendServer }) => {
     await page.goto(`${frontendServer.url}/initial-password`);
     
     await page.getByLabel('New password').waitFor({ state: 'visible' });
