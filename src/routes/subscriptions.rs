@@ -209,7 +209,7 @@ pub async fn send_confirmation_email(
         &email_client
     );
     let text_content = &format!(
-        "Welcome to radivis.com newsletter!
+        "Welcome to the newsletter!
 
 Thank you for subscribing. Please confirm your email address by visiting the link below:
 
@@ -229,7 +229,7 @@ The radivis.com Team",
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
 </head>
 <body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;\">
-    <h2 style=\"color: #2c3e50;\">Welcome to radivis.com newsletter!</h2>
+    <h2 style=\"color: #2c3e50;\">Welcome to the newsletter!</h2>
     <p>Thank you for subscribing. Please confirm your email address by clicking the button below:</p>
     <p style=\"text-align: center; margin: 30px 0;\">
         <a href=\"{}\" style=\"display: inline-block; padding: 12px 30px; background-color: #3498db; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;\">Confirm Email Address</a>
@@ -238,7 +238,6 @@ The radivis.com Team",
     <p style=\"word-break: break-all; color: #3498db; font-size: 12px;\">{}</p>
     <hr style=\"border: none; border-top: 1px solid #ecf0f1; margin: 30px 0;\">
     <p style=\"color: #95a5a6; font-size: 12px;\">If you didn't sign up for this newsletter, you can safely ignore this email.</p>
-    <p style=\"color: #7f8c8d; font-size: 14px;\">Best regards,<br>The radivis.com Team</p>
 </body>
 </html>",
         confirmation_link, confirmation_link
