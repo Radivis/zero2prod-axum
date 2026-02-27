@@ -215,13 +215,6 @@ impl Application {
         // Combine all routes
         let app = Router::new()
             .route("/health_check", get(health_check))
-            // Legacy subscription confirmation route (for email links - backwards compatible)
-            .route("/subscriptions/confirm", get(confirm))
-            // Legacy subscription unsubscribe route (for email links - backwards compatible)
-            .route(
-                "/subscriptions/unsubscribe",
-                get(get_unsubscribe_info).post(confirm_unsubscribe),
-            )
             // Serve OpenAPI spec as JSON at /api/openapi.json
             .route(
                 "/api/openapi.json",
