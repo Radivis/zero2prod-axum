@@ -55,12 +55,63 @@ until curl -s http://localhost:3100/ready 2>/dev/null | grep -q "ready"; do
 done
 echo >&2 "Loki is ready!"
 
-# Launch Promtail
+# Launch Promtail with inline config using localhost
 echo >&2 "Starting Promtail..."
+
+# Create temp config file for Promtail
+TEMP_PROMTAIL_CONFIG=$(mktemp)
+cat > "$TEMP_PROMTAIL_CONFIG" <<'EOF'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container_name'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'compose_service'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'compose_project'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_image']
+        target_label: 'image'
+      - replacement: 'docker'
+        target_label: 'job'
+    
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            timestamp: timestamp
+            target: target
+            span: span
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      - labels:
+          level:
+          target:
+EOF
+chmod 644 "$TEMP_PROMTAIL_CONFIG"
+
 docker run \
   -d \
   --name "promtail_$(date '+%s')" \
-  -v "${PROJECT_ROOT}/promtail-config.yaml:/etc/promtail/config.yaml:ro" \
+  -v "${TEMP_PROMTAIL_CONFIG}:/etc/promtail/config.yaml:ro" \
   -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   --network host \
@@ -69,15 +120,36 @@ docker run \
 
 echo >&2 "Promtail is ready!"
 
-# Launch Grafana
+# Launch Grafana with inline datasource config using localhost
 echo >&2 "Starting Grafana..."
+GRAFANA_DATASOURCE_CONFIG=$(cat <<'EOF'
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://localhost:3100
+    isDefault: true
+    version: 1
+    editable: false
+    jsonData:
+      maxLines: 1000
+EOF
+)
+
+# Create temp file for Grafana datasource config
+TEMP_GRAFANA_DATASOURCE=$(mktemp)
+echo "$GRAFANA_DATASOURCE_CONFIG" > "$TEMP_GRAFANA_DATASOURCE"
+chmod 644 "$TEMP_GRAFANA_DATASOURCE"
+
 docker run \
   -d \
   --name "grafana_$(date '+%s')" \
   -e "GF_SECURITY_ADMIN_USER=admin" \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
   -e "GF_USERS_ALLOW_SIGN_UP=false" \
-  -v "${PROJECT_ROOT}/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml:ro" \
+  -v "${TEMP_GRAFANA_DATASOURCE}:/etc/grafana/provisioning/datasources/datasource.yaml:ro" \
   --network host \
   grafana/grafana:11.0.0
 
