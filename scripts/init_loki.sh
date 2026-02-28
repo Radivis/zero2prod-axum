@@ -34,7 +34,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 echo >&2 "Starting Loki..."
 docker run \
   -d \
-  --name "loki_$(date '+%s')" \
+  --name "zero2prod-axum-loki_$(date '+%s')" \
   -p "3100:3100" \
   -v "${PROJECT_ROOT}/loki-config.yaml:/etc/loki/local-config.yaml:ro" \
   grafana/loki:3.0.0 \
@@ -110,7 +110,7 @@ chmod 644 "$TEMP_PROMTAIL_CONFIG"
 
 docker run \
   -d \
-  --name "promtail_$(date '+%s')" \
+  --name "zero2prod-axum-promtail_$(date '+%s')" \
   -v "${TEMP_PROMTAIL_CONFIG}:/etc/promtail/config.yaml:ro" \
   -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
@@ -145,7 +145,7 @@ chmod 644 "$TEMP_GRAFANA_DATASOURCE"
 
 docker run \
   -d \
-  --name "grafana_$(date '+%s')" \
+  --name "zero2prod-axum-grafana_$(date '+%s')" \
   -e "GF_SECURITY_ADMIN_USER=admin" \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
   -e "GF_USERS_ALLOW_SIGN_UP=false" \
@@ -182,5 +182,5 @@ echo >&2 "To view logs:"
 echo >&2 "  1. Open http://localhost:3000"
 echo >&2 "  2. Navigate to Explore (compass icon)"
 echo >&2 "  3. Select 'Loki' data source"
-echo >&2 "  4. Try query: {container_name=~\".*zero2prod.*\"}"
+echo >&2 "  4. Try query: {container_name=~\".*zero2prod-axum.*\"}"
 echo >&2 ""

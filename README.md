@@ -41,7 +41,9 @@ For local development, you can start the required services:
 
 Then run your application:
 ```bash
-cargo run
+cargo run                            # Run natively
+# OR
+./scripts/init_backend_dockerized.sh # Run in Docker (to test with Loki/Grafana)
 ```
 
 ### Coding Guidelines
@@ -95,16 +97,16 @@ For a better log viewing experience during local development:
 4. Query your application logs using LogQL:
    ```logql
    # All logs from your dev containers
-   {container_name=~".*zero2prod.*"}
+   {container_name=~".*zero2prod-axum.*"}
    
    # Only errors
-   {container_name=~".*zero2prod.*"} | json | level="ERROR"
+   {container_name=~".*zero2prod-axum.*"} | json | level="ERROR"
    
    # Search for specific text
-   {container_name=~".*zero2prod.*"} |= "subscription"
+   {container_name=~".*zero2prod-axum.*"} |= "subscription"
    
    # Filter by extracted JSON fields
-   {container_name=~".*zero2prod.*"} | json | status_code >= 400
+   {container_name=~".*zero2prod-axum.*"} | json | status_code >= 400
    ```
 
 5. Use **Live** mode (button in top right) for real-time log streaming

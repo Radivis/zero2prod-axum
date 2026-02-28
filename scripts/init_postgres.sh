@@ -39,7 +39,7 @@ then
   # sudo usermod -aG docker $USER
   # Afterwards refresh shell session with:
   # newgrp docker
-  CONTAINER_NAME="postgres"
+  CONTAINER_NAME="zero2prod-axum-postgres_$(date '+%s')"
   docker run \
     --env POSTGRES_USER=${SUPERUSER} \
     --env POSTGRES_PASSWORD=${SUPERUSER_PWD} \
