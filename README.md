@@ -210,6 +210,9 @@ Some improvements over the solutions from the book
 - Added a nice start page
 - Added Grafana UI for logs with Loki and Promtail in the backend
 
+## Caveats
+- Deployment was optimized for Docker Compose to enable cheap and simple pre-packaged deployment, but using this deployment route breaks the CD pipeline using Digital Ocean described in the book.
+
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
 
