@@ -7,12 +7,23 @@ In this context "template app" means that this repo is intended to be a conventi
 - Docker
     - Postgres
     - Redis / Valkey
+    - Loki + Promtail + Grafana (for log aggregation)
     - The indentation means that the app expects those servers to run in Docker containers. All you really need is Docker
 - Rust
 - Optional, but suggested for developers: Go and lefthook for the Git hooks
 
 ## Development
 ### Initialization
+
+#### .env file
+Make a copy of .env.example and name it .env.
+
+Uncomment the line
+# DATABASE_URL=postgres://app:secret@localhost:5432/newsletter
+so that your app knows where your database lives.
+
+The other lines in the .env file are not particularly relevant in the local development context, but should exist.
+
 #### Git hooks
 For CD there is a lefthook.yml file. You need to run
 
@@ -30,6 +41,33 @@ When you perform a commit, it is suggested to do so in a console in which you ca
 Don't forget to start the Postgres and Redis/Valkey servers/Docker containers before trying anything!
 
 See initialization logic under scripts/
+
+For local development, you can start the required services:
+```bash
+./scripts/init_postgres.sh  # Start Postgres
+./scripts/init_redis.sh     # Start Redis
+./scripts/init_loki.sh      # Start logging stack (optional, for viewing logs)
+```
+
+Then run your application:
+```bash
+cargo run                            # Run natively
+# OR
+./scripts/init_backend_dockerized.sh # Run in Docker (to test with Loki/Grafana)
+```
+
+To stop local development services:
+```bash
+./scripts/stop_backend.sh    # Stop backend container
+./scripts/stop_postgres.sh   # Stop Postgres container
+./scripts/stop_redis.sh      # Stop Redis container
+./scripts/stop_loki.sh       # Stop logging stack (Loki, Promtail, Grafana)
+./scripts/stop_all.sh        # Stop all at once
+```
+
+#### Local Testing with Docker
+
+Leave `DOMAIN=localhost` in `.env`. Caddy will use its built-in local CA (expect a self-signed certificate warning in the browser).
 
 ### Coding Guidelines
 Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
@@ -58,11 +96,52 @@ Component tests:
 e2e tests:
 `npm run test:e2e`
 
+### Viewing Logs
+
+The application uses structured JSON logging (via `tracing` and `tracing-bunyan-formatter`). Logs can be viewed in multiple ways:
+
+#### Development (Console)
+By default, logs are printed to the console when running `cargo run`.
+
+#### Development (Grafana UI)
+For a better log viewing experience during local development:
+
+1. Start the logging stack:
+   ```bash
+   ./scripts/init_loki.sh
+   ```
+
+2. Open Grafana at `http://localhost:3200`
+   - Username: `admin`
+   - Password: `admin`
+   - Note: Using port 3200 to avoid conflict with React dev server (port 3000)
+
+3. Navigate to **Explore** (compass icon in left sidebar)
+
+4. Query your application logs using LogQL:
+   ```logql
+   # All logs from your dev containers
+   {container_name=~".*zero2prod-axum.*"}
+   
+   # Only errors
+   {container_name=~".*zero2prod-axum.*"} | json | level="ERROR"
+   
+   # Search for specific text
+   {container_name=~".*zero2prod-axum.*"} |= "subscription"
+   
+   # Filter by extracted JSON fields
+   {container_name=~".*zero2prod-axum.*"} | json | status_code >= 400
+   ```
+
+5. Use **Live** mode (button in top right) for real-time log streaming
+
+
+
 ## Deployment
 
 The app is fully Dockerized and can run on any VPS or machine with Docker and Docker Compose.
 
-### Quick Start (Production)
+### Quick Start
 
 1. Copy the example environment file and fill in your values:
    ```bash
@@ -76,27 +155,48 @@ The app is fully Dockerized and can run on any VPS or machine with Docker and Do
    - `APP_EMAIL_CLIENT__SENDER_EMAIL` — Postmark-approved sender email address
    - `POSTGRES_APP_PASSWORD` -- a strong database password
    - `POSTMARK_API_TOKEN` -- your Postmark API token for sending emails
+   - `GRAFANA_ADMIN_PASSWORD` -- Grafana admin password (required)
 
 3. Start everything:
    ```bash
    docker compose up -d
    ```
 
-This brings up four containers:
+This brings up seven containers:
 - **caddy** -- reverse proxy with automatic HTTPS via Let's Encrypt
 - **zero2prod** -- the Rust API server, also serving the React SPA
 - **postgres** -- PostgreSQL 16 database (data persisted in a Docker volume)
 - **valkey** -- Valkey 8 for session storage (data persisted in a Docker volume)
+- **loki** -- Log aggregation and storage (data persisted in a Docker volume)
+- **promtail** -- Log collection agent that scrapes container logs
+- **grafana** -- Log visualization UI accessible at `/grafana` path via Caddy (data persisted in a Docker volume)
 
 Database migrations run automatically on startup.
-
-### Local Testing with Docker
-
-Leave `DOMAIN=localhost` in `.env`. Caddy will use its built-in local CA (expect a self-signed certificate warning in the browser).
 
 ### DNS Setup
 
 Point your domain's A record to the VPS IP address. Caddy will automatically obtain and renew TLS certificates once DNS resolves correctly.
+
+### Grafana UI
+When deployed via Docker Compose, Grafana is automatically available through Caddy:
+
+- Access Grafana at `https://your-domain/grafana` (served via Caddy reverse proxy)
+- Grafana credentials: `admin` / value of `GRAFANA_ADMIN_PASSWORD` from `.env`
+- Navigate to **Explore** and use LogQL queries:
+  ```logql
+  # All API logs
+  {compose_service="zero2prod"}
+  
+  # Filter by log level
+  {compose_service="zero2prod"} | json | level="ERROR"
+  
+  # Search in log messages
+  {compose_service="zero2prod"} |= "database"
+  ```
+
+**Log Retention**: Logs are retained for 31 days by default (configurable in `loki-config.yaml`)
+
+**Learn more about LogQL**: [Loki Query Language Documentation](https://grafana.com/docs/loki/latest/logql/)
 
 ## Improvements
 Some improvements over the solutions from the book
@@ -108,6 +208,7 @@ Some improvements over the solutions from the book
 - Added basic blogging features
 - Added unsubscribe functionality
 - Added a nice start page
+- Added Grafana UI for logs with Loki and Promtail in the backend
 
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.

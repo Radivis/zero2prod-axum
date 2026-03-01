@@ -22,7 +22,7 @@ APP_USER_PWD="${APP_USER_PWD:=secret}"
 APP_DB_NAME="${APP_DB_NAME:=newsletter}"
 
 # Allow to skip Docker if a dockerized Postgres database is already running
-if [[ -z "${SKIP_DOCKER}" ]]
+if [[ -z "${SKIP_DOCKER:-}" ]]
 then
   # if a postgres container is running, print instructions to kill it and exit
   RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=postgres' --format '{{.ID}}')
@@ -39,7 +39,7 @@ then
   # sudo usermod -aG docker $USER
   # Afterwards refresh shell session with:
   # newgrp docker
-  CONTAINER_NAME="postgres"
+  CONTAINER_NAME="zero2prod-axum-postgres_$(date '+%s')"
   docker run \
     --env POSTGRES_USER=${SUPERUSER} \
     --env POSTGRES_PASSWORD=${SUPERUSER_PWD} \
