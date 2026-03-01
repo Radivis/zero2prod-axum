@@ -46,6 +46,15 @@ cargo run                            # Run natively
 ./scripts/init_backend_dockerized.sh # Run in Docker (to test with Loki/Grafana)
 ```
 
+To stop local development services:
+```bash
+./scripts/stop_backend.sh    # Stop backend container
+./scripts/stop_postgres.sh   # Stop Postgres container
+./scripts/stop_redis.sh      # Stop Redis container
+./scripts/stop_loki.sh       # Stop logging stack (Loki, Promtail, Grafana)
+./scripts/stop_all.sh        # Stop all at once
+```
+
 ### Coding Guidelines
 Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
 
