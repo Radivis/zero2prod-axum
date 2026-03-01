@@ -7,10 +7,7 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
-  - url: http://loki-gateway:3100/loki/api/v1/push
-    basic_auth:
-      username: lokiadmin
-      password: ${LOKI_ADMIN_PASSWORD}
+  - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
   - job_name: docker
