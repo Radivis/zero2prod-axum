@@ -14,6 +14,16 @@ In this context "template app" means that this repo is intended to be a conventi
 
 ## Development
 ### Initialization
+
+#### .env file
+Make a copy of .env.example and name it .env.
+
+Uncomment the line
+# DATABASE_URL=postgres://app:secret@localhost:5432/newsletter
+so that your app knows where your database lives.
+
+The other lines in the .env file are not particularly relevant in the local development context, but should exist.
+
 #### Git hooks
 For CD there is a lefthook.yml file. You need to run
 
@@ -54,6 +64,10 @@ To stop local development services:
 ./scripts/stop_loki.sh       # Stop logging stack (Loki, Promtail, Grafana)
 ./scripts/stop_all.sh        # Stop all at once
 ```
+
+#### Local Testing with Docker
+
+Leave `DOMAIN=localhost` in `.env`. Caddy will use its built-in local CA (expect a self-signed certificate warning in the browser).
 
 ### Coding Guidelines
 Both humans and agents should adhere to `.cursor/rules`. The file `.cursor/rules/coding-codex.mdc` is the canonical starting point.
@@ -120,32 +134,13 @@ For a better log viewing experience during local development:
 
 5. Use **Live** mode (button in top right) for real-time log streaming
 
-#### Production (Grafana UI)
-When deployed via Docker Compose, Grafana is automatically available through Caddy:
 
-- Access Grafana at `https://your-domain/grafana` (served via Caddy reverse proxy)
-- Grafana credentials: `admin` / value of `GRAFANA_ADMIN_PASSWORD` from `.env`
-- Navigate to **Explore** and use LogQL queries:
-  ```logql
-  # All API logs
-  {compose_service="zero2prod"}
-  
-  # Filter by log level
-  {compose_service="zero2prod"} | json | level="ERROR"
-  
-  # Search in log messages
-  {compose_service="zero2prod"} |= "database"
-  ```
-
-**Log Retention**: Logs are retained for 31 days by default (configurable in `loki-config.yaml`)
-
-**Learn more about LogQL**: [Loki Query Language Documentation](https://grafana.com/docs/loki/latest/logql/)
 
 ## Deployment
 
 The app is fully Dockerized and can run on any VPS or machine with Docker and Docker Compose.
 
-### Quick Start (Production)
+### Quick Start
 
 1. Copy the example environment file and fill in your values:
    ```bash
@@ -177,13 +172,30 @@ This brings up seven containers:
 
 Database migrations run automatically on startup.
 
-### Local Testing with Docker
-
-Leave `DOMAIN=localhost` in `.env`. Caddy will use its built-in local CA (expect a self-signed certificate warning in the browser).
-
 ### DNS Setup
 
 Point your domain's A record to the VPS IP address. Caddy will automatically obtain and renew TLS certificates once DNS resolves correctly.
+
+### Grafana UI
+When deployed via Docker Compose, Grafana is automatically available through Caddy:
+
+- Access Grafana at `https://your-domain/grafana` (served via Caddy reverse proxy)
+- Grafana credentials: `admin` / value of `GRAFANA_ADMIN_PASSWORD` from `.env`
+- Navigate to **Explore** and use LogQL queries:
+  ```logql
+  # All API logs
+  {compose_service="zero2prod"}
+  
+  # Filter by log level
+  {compose_service="zero2prod"} | json | level="ERROR"
+  
+  # Search in log messages
+  {compose_service="zero2prod"} |= "database"
+  ```
+
+**Log Retention**: Logs are retained for 31 days by default (configurable in `loki-config.yaml`)
+
+**Learn more about LogQL**: [Loki Query Language Documentation](https://grafana.com/docs/loki/latest/logql/)
 
 ## Improvements
 Some improvements over the solutions from the book
@@ -195,6 +207,7 @@ Some improvements over the solutions from the book
 - Added basic blogging features
 - Added unsubscribe functionality
 - Added a nice start page
+- Added Grafana UI for logs with Loki and Promtail in the backend
 
 ### Future Options
 - Refactor to Tailwind + shadcn/ui. Reason: MUI Update 6 -> 7 was a complete and utter failure.
