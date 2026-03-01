@@ -111,9 +111,10 @@ For a better log viewing experience during local development:
    ./scripts/init_loki.sh
    ```
 
-2. Open Grafana at `http://localhost:3000`
+2. Open Grafana at `http://localhost:3200`
    - Username: `admin`
    - Password: `admin`
+   - Note: Using port 3200 to avoid conflict with React dev server (port 3000)
 
 3. Navigate to **Explore** (compass icon in left sidebar)
 

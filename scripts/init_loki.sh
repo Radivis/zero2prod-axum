@@ -162,6 +162,7 @@ docker run \
   -e "GF_SECURITY_ADMIN_USER=admin" \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
   -e "GF_USERS_ALLOW_SIGN_UP=false" \
+  -e "GF_SERVER_HTTP_PORT=3200" \
   -v "${TEMP_GRAFANA_DATASOURCE}:/etc/grafana/provisioning/datasources/datasource.yaml:ro" \
   --network host \
   grafana/grafana:11.0.0
@@ -170,7 +171,7 @@ docker run \
 echo >&2 "Waiting for Grafana to be ready..."
 TIMEOUT=60
 ELAPSED=0
-until curl -s http://localhost:3000/api/health > /dev/null 2>&1; do
+until curl -s http://localhost:3200/api/health > /dev/null 2>&1; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
     echo >&2 "ERROR: Grafana failed to start within ${TIMEOUT} seconds"
     echo >&2 "Check logs with: docker logs \$(docker ps --filter 'name=grafana' --format '{{.ID}}')"
@@ -185,14 +186,14 @@ echo >&2 "======================================"
 echo >&2 "Logging stack is ready!"
 echo >&2 "======================================"
 echo >&2 ""
-echo >&2 "Grafana UI: http://localhost:3000"
+echo >&2 "Grafana UI: http://localhost:3200"
 echo >&2 "  Username: admin"
 echo >&2 "  Password: admin"
 echo >&2 ""
 echo >&2 "Loki API: http://localhost:3100"
 echo >&2 ""
 echo >&2 "To view logs:"
-echo >&2 "  1. Open http://localhost:3000"
+echo >&2 "  1. Open http://localhost:3200"
 echo >&2 "  2. Navigate to Explore (compass icon)"
 echo >&2 "  3. Select 'Loki' data source"
 echo >&2 "  4. Try query: {container_name=~\".*zero2prod-axum.*\"}"
