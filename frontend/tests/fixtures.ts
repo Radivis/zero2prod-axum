@@ -1,6 +1,7 @@
 import { test as base, Page, TestInfo } from '@playwright/test';
 import { spawnTestApp, stopTestApp, TestApp, waitForBackendReady } from './init';
 import { ChildProcess } from 'child_process';
+import { createHash } from 'crypto';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { writeLog } from './helpers';
@@ -362,13 +363,29 @@ interface TestFixtures {
   authenticatedPage: AuthenticatedPageWithCredentials;
 }
 
-const extractCleanTestName = (testInfo: TestInfo) => {
-  return testInfo.titlePath
-  .slice(1) // Discard file name
-  .join('__')
-  .replace(/\s+/g, '-')
-  .slice (0, 30) // Limit length to 30 characters to avoid database name length limit
-  .toLowerCase();
+/**
+ * Derive a clean test name from the Playwright test's title path.
+ * Includes describe block(s) + test name for uniqueness across spec files.
+ * When the name exceeds PostgreSQL's identifier limit, it is truncated
+ * and a hash suffix is appended to preserve uniqueness.
+ */
+function extractCleanTestName(testInfo: TestInfo): string {
+  const fullName = testInfo.titlePath
+    .slice(1) // Discard file name
+    .join('__')
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+
+  // PostgreSQL limits identifiers to 63 chars.
+  // Rust prepends "test-" (5 chars), fixture prepends "e2e-" (4 chars) = 9 chars overhead
+  const maxLength = 63 - 9;
+
+  if (fullName.length <= maxLength) {
+    return fullName;
+  }
+
+  const hash = createHash('sha256').update(fullName).digest('hex').substring(0, 8);
+  return fullName.substring(0, maxLength - 9) + '-' + hash;
 }
 
 export const test = base.extend<TestFixtures>({
