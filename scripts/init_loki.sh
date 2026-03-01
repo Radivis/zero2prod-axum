@@ -29,6 +29,19 @@ fi
 # Get the absolute path to the project root (where the script is located)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TEMP_PROMTAIL_CONFIG=""
+TEMP_GRAFANA_DATASOURCE=""
+
+cleanup_temp_files() {
+  if [[ -n "${TEMP_PROMTAIL_CONFIG:-}" && -f "${TEMP_PROMTAIL_CONFIG}" ]]; then
+    rm -f "${TEMP_PROMTAIL_CONFIG}"
+  fi
+  if [[ -n "${TEMP_GRAFANA_DATASOURCE:-}" && -f "${TEMP_GRAFANA_DATASOURCE}" ]]; then
+    rm -f "${TEMP_GRAFANA_DATASOURCE}"
+  fi
+}
+
+trap cleanup_temp_files EXIT
 
 # Launch Loki
 echo >&2 "Starting Loki..."

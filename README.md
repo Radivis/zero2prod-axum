@@ -124,7 +124,7 @@ For a better log viewing experience during local development:
 When deployed via Docker Compose, Grafana is automatically available:
 
 - Access Grafana at `http://your-domain:3000` (or configure Caddy to proxy it)
-- Default credentials: `admin` / `admin` (change on first login, or set `GRAFANA_ADMIN_PASSWORD` in `.env`)
+- Grafana credentials: `admin` / value of `GRAFANA_ADMIN_PASSWORD` from `.env`
 - Navigate to **Explore** and use LogQL queries:
   ```logql
   # All API logs
@@ -159,19 +159,21 @@ The app is fully Dockerized and can run on any VPS or machine with Docker and Do
    - `APP_EMAIL_CLIENT__SENDER_EMAIL` — Postmark-approved sender email address
    - `POSTGRES_APP_PASSWORD` -- a strong database password
    - `POSTMARK_API_TOKEN` -- your Postmark API token for sending emails
-   - `GRAFANA_ADMIN_PASSWORD` -- (optional) Grafana admin password, defaults to "admin"
+   - `GRAFANA_ADMIN_PASSWORD` -- Grafana admin password (required)
+   - `LOKI_ADMIN_PASSWORD` -- password used to protect Loki API access (required)
 
 3. Start everything:
    ```bash
    docker compose up -d
    ```
 
-This brings up seven containers:
+This brings up eight containers:
 - **caddy** -- reverse proxy with automatic HTTPS via Let's Encrypt
 - **zero2prod** -- the Rust API server, also serving the React SPA
 - **postgres** -- PostgreSQL 16 database (data persisted in a Docker volume)
 - **valkey** -- Valkey 8 for session storage (data persisted in a Docker volume)
 - **loki** -- Log aggregation and storage (data persisted in a Docker volume)
+- **loki-gateway** -- password-protected gateway in front of Loki API
 - **promtail** -- Log collection agent that scrapes container logs
 - **grafana** -- Log visualization UI at port 3000 (data persisted in a Docker volume)
 
