@@ -36,20 +36,8 @@ pub async fn validate_credentials(
             .await
             .map_err(AuthError::UnexpectedError)?
     {
-        eprintln!(
-            "[AUTH DEBUG] Found user in database: user_id={}, password_hash_len={}",
-            stored_user_id,
-            stored_password_hash.expose_secret().len()
-        );
-        eprintln!(
-            "[AUTH DEBUG] Stored password hash starts with: {}",
-            &stored_password_hash.expose_secret()
-                [..std::cmp::min(50, stored_password_hash.expose_secret().len())]
-        );
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
-    } else {
-        eprintln!("[AUTH DEBUG] User NOT found in database!");
     }
 
     let verify_result = spawn_blocking_with_tracing(move || {
@@ -101,24 +89,6 @@ async fn get_stored_credentials(
     username: &str,
     pool: &PgPool,
 ) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
-    let all_users = sqlx::query!("SELECT username FROM users LIMIT 10")
-        .fetch_all(pool)
-        .await;
-
-    match all_users {
-        Ok(users) => {
-            eprintln!("[GET_CREDS DEBUG] Found {} users in database", users.len());
-            for user in users {
-                eprintln!("[GET_CREDS DEBUG]   - User: {}", user.username);
-            }
-        }
-        Err(e) => {
-            eprintln!("[GET_CREDS DEBUG] Error fetching users: {:?}", e);
-        }
-    }
-
-    eprintln!("[GET_CREDS DEBUG] Looking for username: {}", username);
-
     let row = sqlx::query!(
         r#"
         SELECT user_id, password_hash
